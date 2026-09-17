@@ -1,0 +1,219 @@
+openapi: 3.1.0
+info:
+  title: Bookar REST API
+  version: 1.0.0
+  description: |
+    Bookar's REST API — a fallback integration for tools that don't support MCP natively.
+    Supports Zapier, Make, n8n, Microsoft Copilot Studio, Gemini Extensions, and older
+    ChatGPT Custom GPT Actions.
+
+    For Claude, ChatGPT (Developer Mode), Cursor, Windsurf, and any MCP-capable client,
+    use the MCP server instead (Streamable HTTP transport).
+
+    **Auth:** `Authorization: Bearer <api_key>` — same non-expiring key issued from the
+    Bookar dashboard Connections page.
+  contact:
+    name: Bookar
+    url: https://bookar.app
+
+servers:
+  - url: https://bookar.app
+    description: Production
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/bookmarks/search:
+    get:
+      summary: Search bookmarks
+      description: Full-text search across the user's saved bookmarks.
+      operationId: searchBookmarks
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Search query (supports websearch-style operators)
+          example: "design tools"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookmarkListResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/bookmarks/recent:
+    get:
+      summary: List recent bookmarks
+      description: Returns the most recently added bookmarks, ordered by creation date.
+      operationId: listRecentBookmarks
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Number of bookmarks to return
+          example: 10
+      responses:
+        "200":
+          description: Recent bookmarks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookmarkListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /api/v1/bookmarks:
+    post:
+      summary: Add a bookmark
+      description: |
+        Add a new bookmark to the user's library. Marked as bot-added (`source = 'bot'`)
+        so it appears separately in the dashboard.
+      operationId: addBookmark
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url:
+                  type: string
+                  format: uri
+                  description: The URL to bookmark
+                  example: "https://example.com/tool"
+                title:
+                  type: string
+                  description: Optional title (AI will generate one if omitted)
+                  example: "My Awesome Tool"
+                notes:
+                  type: string
+                  description: Optional notes or description
+                  example: "Useful for converting PDFs"
+      responses:
+        "201":
+          description: Bookmark created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookmark_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    example: "created"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/UnprocessableEntity"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: API key (64-char hex, non-expiring)
+      description: |
+        Long-lived API key generated from the Bookar Connections page.
+        Passed as: `Authorization: Bearer <api_key>`
+
+  schemas:
+    Bookmark:
+      type: object
+      properties:
+        title:
+          type: string
+          nullable: true
+          example: "Figma — Collaborative Design Tool"
+        url:
+          type: string
+          format: uri
+          example: "https://figma.com"
+        description:
+          type: string
+          nullable: true
+          example: "A web-based collaborative interface design tool for teams."
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["design", "collaboration", "ui"]
+        folder_path:
+          type: string
+          nullable: true
+          example: "Work/Design Tools"
+        device_name:
+          type: string
+          nullable: true
+          example: "My Laptop"
+        browser:
+          type: string
+          nullable: true
+          example: "Brave"
+        created_at:
+          type: string
+          format: date-time
+
+    BookmarkListResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Bookmark"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Invalid or missing API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    RateLimited:
+      description: Rate limit exceeded (60 req/min per key)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnprocessableEntity:
+      description: Missing or invalid request fields
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

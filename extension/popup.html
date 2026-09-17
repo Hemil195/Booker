@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bookar Sync</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bk-bg: #09090b;
+      --bk-surface: #18181b;
+      --bk-surface-hover: #27272a;
+      --bk-text-primary: #fafafa;
+      --bk-text-muted: #a1a1aa;
+      --bk-border: rgba(255, 255, 255, 0.12);
+      --bk-accent: #ffffff;
+      --bk-accent-hover: #e4e4e7;
+      --bk-selection: rgba(255, 255, 255, 0.08);
+      --bk-ease: 180ms ease-out;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 340px;
+      min-height: 220px;
+      background: var(--bk-bg);
+      color: var(--bk-text-primary);
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    .header {
+      background: var(--bk-surface);
+      border-bottom: 1px solid var(--bk-border);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #ffffff, #a1a1aa);
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 10px rgba(255,255,255,0.15);
+    }
+
+    .logo svg {
+      width: 16px;
+      height: 16px;
+      fill: #09090b;
+    }
+
+    .header-text h1 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--bk-text-primary);
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+    }
+    .header-text p {
+      font-size: 11px;
+      color: var(--bk-text-muted);
+      line-height: 1.2;
+    }
+
+    .content { padding: 14px 16px; }
+
+    /* ── Cards & Containers ── */
+    .card {
+      background: var(--bk-surface);
+      border: 1px solid var(--bk-border);
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bk-selection);
+      border: 1px solid var(--bk-border);
+      color: var(--bk-text-primary);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 6px rgba(16,185,129,0.6);
+    }
+
+    /* ── Forms & Controls ── */
+    .form-group {
+      margin-bottom: 10px;
+    }
+    .form-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--bk-text-muted);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      background: var(--bk-bg);
+      border: 1px solid var(--bk-border);
+      border-radius: 8px;
+      color: var(--bk-text-primary);
+      font-family: inherit;
+      font-size: 12px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color var(--bk-ease);
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--bk-accent);
+    }
+
+    input.code-input {
+      font-size: 18px;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 5px;
+      text-align: center;
+      padding: 10px 8px;
+      font-weight: 700;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--bk-ease);
+      border: none;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--bk-accent);
+      color: #09090b;
+    }
+    .btn-primary:hover {
+      background: var(--bk-accent-hover);
+    }
+    .btn-primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-secondary {
+      background: var(--bk-selection);
+      color: var(--bk-text-primary);
+      border: 1px solid var(--bk-border);
+    }
+    .btn-secondary:hover {
+      background: rgba(255,255,255,0.12);
+    }
+
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    /* ── Save Current Tab Card ── */
+    .save-tab-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .tab-favicon {
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    .tab-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--bk-text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Notifications ── */
+    .message {
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      margin-top: 8px;
+      display: none;
+    }
+    .message-error {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fc8181;
+    }
+    .message-success {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+    }
+
+    .spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid rgba(9,9,11,0.3);
+      border-top-color: #09090b;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Hidden states */
+    #state-linked, #state-unlinked { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <img src="icons/icon48.png" alt="Bookar" width="32" height="32" style="border-radius: 9px; object-fit: cover;" />
+      <div class="header-text">
+        <h1>Bookar Sync</h1>
+        <p>Synced knowledge everywhere</p>
+      </div>
+    </div>
+    <span class="status-badge" id="status-badge">
+      <span class="status-dot"></span>
+      Ready
+    </span>
+  </div>
+
+  <div class="content">
+    <!-- STATE 1: LINKED -->
+    <div id="state-linked">
+      <!-- Device Info Header Card -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+          <div>
+            <span class="form-label" style="margin-bottom: 2px;">Connected Device</span>
+            <strong id="device-name" style="font-size: 13px; color: var(--bk-text-primary);">—</strong>
+          </div>
+          <span id="device-browser" style="font-size: 11px; color: var(--bk-text-muted); background: var(--bk-bg); padding: 2px 8px; border-radius: 6px; border: 1px solid var(--bk-border);">
+            Browser
+          </span>
+        </div>
+        <p style="font-size: 10px; color: var(--bk-text-muted);" id="sync-status-text">
+          ● Real-time bidirectional sync enabled
+        </p>
+      </div>
+
+      <!-- Save Current Page Card -->
+      <div class="card" style="border-color: rgba(255,255,255,0.2);">
+        <div class="save-tab-header">
+          <img id="active-tab-favicon" class="tab-favicon" src="" alt="" style="display: none;" />
+          <span class="tab-title" id="active-tab-title">Loading current tab…</span>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 8px;">
+          <input type="text" id="save-url-input" placeholder="https://..." readonly style="font-family: 'Courier New', monospace; font-size: 11px; color: var(--bk-text-muted);" />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 10px;">
+          <input type="text" id="save-folder-input" placeholder="Folder path (optional e.g. Work/Design)" />
+        </div>
+
+        <button class="btn btn-primary" id="btn-save-tab">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          Save Current Page to Bookar
+        </button>
+
+        <div class="message message-success" id="save-success-msg">✓ Saved to Bookar!</div>
+        <div class="message message-error" id="save-error-msg">Failed to save page.</div>
+      </div>
+
+      <!-- Dashboard & Manual Sync Buttons -->
+      <div class="btn-grid">
+        <a class="btn btn-secondary" id="link-dashboard" href="#" target="_blank">
+          Dashboard ↗
+        </a>
+        <button class="btn btn-secondary" id="btn-manual-sync">
+          Sync Now ⚡
+        </button>
+      </div>
+
+      <!-- Unlink Link -->
+      <div style="margin-top: 12px; text-align: center;">
+        <button id="btn-unlink" style="background: none; border: none; color: var(--bk-text-muted); font-size: 11px; font-family: inherit; cursor: pointer; text-decoration: underline;">
+          Unlink this browser device
+        </button>
+      </div>
+    </div>
+
+    <!-- STATE 2: UNLINKED -->
+    <div id="state-unlinked">
+      <div class="card">
+        <p style="font-size: 13px; color: var(--bk-text-primary); font-weight: 700; margin-bottom: 4px;">
+          Link your Browser
+        </p>
+        <p style="font-size: 11px; color: var(--bk-text-muted); line-height: 1.5; margin-bottom: 12px;">
+          Open your <a id="link-to-dashboard" href="#" target="_blank" style="color: var(--bk-text-primary); text-decoration: underline;">Bookar Dashboard</a> and copy the 6-digit code.
+        </p>
+
+        <div class="form-group">
+          <label class="form-label">6-Digit Linking Code</label>
+          <input type="text" id="code-input" class="code-input" maxlength="6" placeholder="000000" />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Device Name (optional)</label>
+          <input type="text" id="name-input" placeholder="e.g. Work Chrome" />
+        </div>
+
+        <button class="btn btn-primary" id="btn-link" style="margin-top: 4px;">
+          Link Device
+        </button>
+
+        <div class="message message-error" id="error-msg"></div>
+        <div class="message message-success" id="success-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
