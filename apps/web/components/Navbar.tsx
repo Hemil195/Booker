@@ -60,7 +60,7 @@ export function Navbar({ user }: NavbarProps) {
           borderBottom: "1px solid var(--bk-border)",
         }}
       >
-        <div className="max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-8 h-[68px] flex items-center justify-between gap-3">
+        <div className="max-w-[1440px] w-full mx-auto min-h-[55px] px-3 py-2 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2.5 group">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -78,14 +78,14 @@ export function Navbar({ user }: NavbarProps) {
           </Link>
 
           {/* Centered Nav Links */}
-          <nav className="hidden md:flex items-center gap-1 p-1 rounded-[10px]" style={{ background: "rgba(23,30,42,0.82)", border: "1px solid var(--bk-border)" }}>
+          <nav className="order-3 flex w-full min-w-0 items-center gap-1 overflow-x-auto rounded-[10px] p-1 md:order-none md:w-auto md:max-w-none" style={{ background: "rgba(23,30,42,0.82)", border: "1px solid var(--bk-border)" }}>
             {navLinks.map(({ label, href, icon: Icon }) => {
               const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
               return (
                 <Link
                   key={href}
                   href={href}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-xs font-medium transition-bk"
+                  className="flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-xs font-medium transition-bk"
                   style={{
                     background: active ? "var(--bk-selection)" : "transparent",
                     color: active ? "var(--bk-accent)" : "var(--bk-text-muted)",

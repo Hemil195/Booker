@@ -15,7 +15,6 @@ import {
   ClockIcon,
   InfoIcon,
   RefreshCwIcon,
-  SparklesIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -75,7 +74,7 @@ export function BookmarkRow({
 
   return (
     <div
-      className="flex h-full items-start gap-3 px-3 sm:px-4 py-3 rounded-[11px] group transition-bk cursor-pointer select-none"
+      className="flex h-full min-w-0 items-start gap-2.5 px-2.5 py-3 sm:gap-3 sm:px-4 rounded-[11px] group transition-bk cursor-pointer select-none"
       style={{
         border: "1px solid var(--bk-border)",
         borderColor: checked ? "var(--bk-accent)" : "var(--bk-border)",
@@ -122,7 +121,7 @@ export function BookmarkRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">
           <span
-            className="text-sm font-semibold leading-snug transition-bk line-clamp-2"
+            className="min-w-0 text-sm font-semibold leading-snug transition-bk line-clamp-2"
             style={{ color: "var(--bk-text-primary)" }}
           >
             {bookmark.title ?? bookmark.url}
@@ -149,24 +148,28 @@ export function BookmarkRow({
             Generating description…
           </p>
         ) : bookmark.description ? (
-          <p
-            className="text-xs mt-0.5 line-clamp-1"
-            style={{ color: "var(--bk-text-muted)" }}
-          >
+          <div className="mt-1 text-xs line-clamp-2 leading-relaxed" style={{ color: "var(--bk-text-muted)" }}>
+            <span style={{ color: "var(--bk-text-primary)" }}>Description:</span>{" "}
             {bookmark.description}
-          </p>
+          </div>
         ) : null}
 
-        {/* Metadata line (Folder, Device, Added date timestamp) */}
+        {/* Tags line */}
+        <div className="mt-1 text-[11px] truncate" style={{ color: "var(--bk-text-muted)" }}>
+          <span style={{ color: "var(--bk-text-primary)" }}>Tags:</span>{" "}
+          {bookmark.tags && bookmark.tags.length > 0 ? bookmark.tags.join(", ") : "None"}
+        </div>
+
+        {/* Metadata line (Folder, browser, added time) */}
         <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px]" style={{ color: "var(--bk-text-muted)" }}>
           {bookmark.folder_path && (
             <span className="flex items-center gap-1">
               <FolderIcon style={{ width: "10px", height: "10px" }} />
-              {bookmark.folder_path}
+              <span><strong style={{ color: "var(--bk-text-primary)" }}>Folder:</strong> {bookmark.folder_path}</span>
             </span>
           )}
           {bookmark.device_name && (
-            <span>· {bookmark.device_name}</span>
+            <span>· <strong style={{ color: "var(--bk-text-primary)" }}>Browser:</strong> {bookmark.device_name}</span>
           )}
           <span
             className="flex items-center gap-1"
@@ -174,78 +177,26 @@ export function BookmarkRow({
             suppressHydrationWarning
           >
             <ClockIcon style={{ width: "10px", height: "10px" }} />
-            Added {relativeTime(bookmark.created_at)}
+            <span><strong style={{ color: "var(--bk-text-primary)" }}>Time:</strong> {relativeTime(bookmark.created_at)}</span>
           </span>
-
-          {/* Tags */}
-          {bookmark.tags?.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="bk-pill"
-              style={{
-                background: "rgba(255,255,255,0.06)",
-                color: "var(--bk-text-muted)",
-                border: "1px solid var(--bk-border)",
-              }}
-            >
-              {tag}
-            </span>
-          ))}
         </div>
       </div>
 
       {/* Hover action buttons (Open Link & Kebab Menu) */}
       <div
-        className="flex flex-col items-stretch gap-1.5 flex-shrink-0"
+        className="flex flex-shrink-0 flex-col items-stretch gap-1.5"
         style={{
           opacity: 1,
-          minWidth: "96px",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Hover Open Link button below/beside 3 dots */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            window.open(bookmark.url, "_blank", "noopener,noreferrer");
-          }}
-          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-[6px] text-xs font-medium transition-bk"
-          style={{
-            background: "rgba(255,255,255,0.08)",
-            color: "var(--bk-text-primary)",
-            border: "1px solid var(--bk-border)",
-          }}
-          title="Open link in new tab"
-        >
-          <ExternalLinkIcon className="w-3 h-3" />
-          <span className="text-[11px]">Open Link</span>
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onRegenerate?.(bookmark);
-          }}
-          disabled={!onRegenerate || bookmark.description_pending}
-          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-[6px] text-xs font-medium transition-bk disabled:opacity-50"
-          style={{
-            background: "rgba(215,189,121,0.08)",
-            color: "var(--bk-accent)",
-            border: "1px solid var(--bk-border)",
-          }}
-          title="Regenerate AI summary"
-        >
-          <SparklesIcon className="w-3 h-3" />
-          <span className="text-[11px]">AI Summary</span>
-        </button>
-
-        {/* Kebab dropdown menu */}
+        {/* Compact action menu */}
         <DropdownMenu>
           <DropdownMenuTrigger
             className="p-1.5 rounded-[6px] transition-bk"
-            style={{ color: "var(--bk-text-muted)", background: "transparent", border: "none", cursor: "pointer" }}
+            style={{ color: "var(--bk-text-muted)", background: "transparent", border: "1px solid transparent", cursor: "pointer" }}
             onMouseEnter={(e) =>
-              ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.1)")
+              ((e.currentTarget as HTMLElement).style.background = "var(--bk-selection)")
             }
             onMouseLeave={(e) =>
               ((e.currentTarget as HTMLElement).style.background = "transparent")
@@ -253,21 +204,31 @@ export function BookmarkRow({
           >
             <MoreHorizontalIcon className="w-4 h-4" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={4}>
-            <DropdownMenuItem onClick={() => onSelect?.(bookmark)}>
+          <DropdownMenuContent
+            align="center"
+            sideOffset={8}
+            className="min-w-[176px] rounded-[9px] p-1.5"
+            style={{
+              background: "#151e2b",
+              border: "1px solid var(--bk-border)",
+              boxShadow: "0 12px 28px rgba(0,0,0,0.38)",
+              color: "var(--bk-text-primary)",
+            }}
+          >
+            <DropdownMenuItem className="text-xs text-[var(--bk-text-primary)] focus:bg-[var(--bk-selection)] focus:text-[var(--bk-accent)]" onClick={() => onSelect?.(bookmark)}>
               <InfoIcon className="w-3.5 h-3.5 mr-2" />
-              View details
+              View Details
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => window.open(bookmark.url, "_blank", "noopener,noreferrer")}>
+            <DropdownMenuItem className="text-xs text-[var(--bk-text-primary)] focus:bg-[var(--bk-selection)] focus:text-[var(--bk-accent)]" onClick={() => window.open(bookmark.url, "_blank", "noopener,noreferrer")}>
               <ExternalLinkIcon className="w-3.5 h-3.5 mr-2" />
-              Open link
+              Open
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => onRegenerate?.(bookmark)} disabled={bookmark.description_pending}>
+            <DropdownMenuItem className="text-xs text-[var(--bk-text-primary)] focus:bg-[var(--bk-selection)] focus:text-[var(--bk-accent)]" onClick={() => onRegenerate?.(bookmark)} disabled={bookmark.description_pending}>
               <RefreshCwIcon className="w-3.5 h-3.5 mr-2" />
-              Regenerate AI summary
+              Regenerate Summary
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-red-400 focus:text-red-400"
+              className="mt-1 border-t border-[var(--bk-border)] pt-1 text-xs text-red-400 focus:bg-red-500/10 focus:text-red-300"
               onClick={() => onDelete(bookmark.id)}
             >
               <Trash2Icon className="w-3.5 h-3.5 mr-2" />

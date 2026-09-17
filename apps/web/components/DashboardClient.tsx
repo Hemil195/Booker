@@ -12,6 +12,8 @@ import {
   Share2Icon,
   FolderIcon,
   FolderPlusIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ChevronUpIcon,
   XIcon,
 } from "lucide-react";
@@ -29,6 +31,8 @@ import { AddBookmarkDialog } from "@/components/AddBookmarkDialog";
 import { BookmarkDetailDialog } from "@/components/BookmarkDetailDialog";
 
 type FilterTab = "all" | "recent" | "bot";
+
+const DEFAULT_PAGE_SIZE = 10;
 
 interface Device {
   id: string;
@@ -52,6 +56,7 @@ export function DashboardClient({
   const [hasLinkedDevice, setHasLinkedDevice] = useState(initialHasLinked);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [bookmarks, setBookmarks] = useState<BookmarkWithDevice[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -59,63 +64,26 @@ export function DashboardClient({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [detailBookmark, setDetailBookmark] = useState<BookmarkWithDevice | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const supabase = createSupabaseBrowserClient();
 
-  const fetchBookmarks = useCallback(async () => {
+  const fetchBookmarks = useCallback(async (page: number, size: number, queryText: string, tab: FilterTab) => {
     setLoading(true);
-    let { data, error } = await supabase
-      .from("bookmarks")
-      .select("*, devices(device_name, browser)")
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(300);
-
-    if (error) {
-      console.warn("Primary bookmark join query notice, attempting fallback select:", error.message);
-      const fallback = await supabase
-        .from("bookmarks")
-        .select("*")
-        .eq("user_id", userId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(300);
-      data = fallback.data;
-      error = fallback.error;
-    }
-
-    if (!error && data) {
-      const groupMap = new Map<string, any>();
-
-      data.forEach((bm: any) => {
-        const normUrl = (bm.url || "").trim().toLowerCase().replace(/\/$/, "");
-        const devName =
-          bm.devices?.browser && bm.devices.browser !== "Unknown"
-            ? bm.devices.browser
-            : bm.devices?.device_name && bm.devices.device_name !== "Pending Device"
-            ? bm.devices.device_name
-            : "Browser";
-
-        if (!groupMap.has(normUrl)) {
-          groupMap.set(normUrl, {
-            ...bm,
-            device_name: devName,
-            browser: bm.devices?.browser,
-          });
-        } else {
-          const existing = groupMap.get(normUrl)!;
-          if (devName && existing.device_name && !existing.device_name.includes(devName)) {
-            existing.device_name = `${existing.device_name}, ${devName}`;
-          }
-        }
-      });
-
-      setBookmarks(Array.from(groupMap.values()));
-    } else if (error) {
+    const params = new URLSearchParams({ page: String(page), size: String(size), q: queryText, tab });
+    try {
+      const response = await fetch(`/api/dashboard/bookmarks?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`Bookmark request failed with status ${response.status}`);
+      const result: { bookmarks: BookmarkWithDevice[]; total: number } = await response.json();
+      setBookmarks(result.bookmarks);
+      setTotalRecords(result.total);
+    } catch (error) {
       console.error("Failed to load bookmarks:", error);
+      setBookmarks([]);
+      setTotalRecords(0);
     }
     setLoading(false);
-  }, [supabase, userId]);
+  }, []);
 
   useEffect(() => {
     if (!hasLinkedDevice) {
@@ -124,11 +92,11 @@ export function DashboardClient({
     }
 
     const load = async () => {
-      await fetchBookmarks();
+      await fetchBookmarks(currentPage, pageSize, searchQuery, activeTab);
     };
 
     void load();
-  }, [hasLinkedDevice, fetchBookmarks]);
+  }, [hasLinkedDevice, fetchBookmarks, currentPage, pageSize, searchQuery, activeTab]);
 
   // Realtime subscription for live updates from DB
   useEffect(() => {
@@ -138,11 +106,11 @@ export function DashboardClient({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookmarks", filter: `user_id=eq.${userId}` },
-        () => fetchBookmarks(),
+        () => fetchBookmarks(currentPage, pageSize, searchQuery, activeTab),
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [supabase, userId, hasLinkedDevice, fetchBookmarks]);
+  }, [supabase, userId, hasLinkedDevice, fetchBookmarks, currentPage, pageSize, searchQuery, activeTab]);
 
   const handleDelete = async (id: string) => {
     await supabase
@@ -150,6 +118,7 @@ export function DashboardClient({
       .update({ deleted_at: new Date().toISOString() })
       .eq("id", id);
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
+    setTotalRecords((count) => Math.max(0, count - 1));
   };
 
   const handleRegenerate = async (bookmark: BookmarkWithDevice) => {
@@ -164,7 +133,7 @@ export function DashboardClient({
         body: JSON.stringify({ bookmark_id: bookmark.id }),
       });
       if (!response.ok) throw new Error("Failed to regenerate bookmark summary");
-      await fetchBookmarks();
+      await fetchBookmarks(currentPage, pageSize, searchQuery, activeTab);
     } catch (error) {
       console.error("Failed to regenerate bookmark summary", error);
       setBookmarks((prev) => prev.map((item) =>
@@ -180,6 +149,7 @@ export function DashboardClient({
       .update({ deleted_at: new Date().toISOString() })
       .in("id", ids);
     setBookmarks((prev) => prev.filter((b) => !selectedIds.has(b.id)));
+    setTotalRecords((count) => Math.max(0, count - selectedIds.size));
     setSelectedIds(new Set());
   };
 
@@ -239,40 +209,18 @@ export function DashboardClient({
     return Array.from(set).sort();
   }, [bookmarks]);
 
-  // ── Instant real-time client search and filtering ─────────────────────────
-  const displayedBookmarks = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+  // The current page is already filtered and paginated by the database query.
+  const displayedBookmarks = bookmarks;
 
-    let list = bookmarks.filter((bm) => {
-      if (activeTab === "bot") {
-        const src = bm.source as string | undefined;
-        const isBotSource =
-          src === "bot" ||
-          src === "mcp" ||
-          src === "api" ||
-          (src && src !== "browser" && src !== "dashboard");
-        if (!isBotSource) return false;
-      }
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, searchQuery]);
 
-      if (!q) return true;
+  const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
 
-      const titleMatch = bm.title?.toLowerCase().includes(q);
-      const urlMatch = bm.url?.toLowerCase().includes(q);
-      const descMatch = bm.description?.toLowerCase().includes(q);
-      const folderMatch = bm.folder_path?.toLowerCase().includes(q);
-      const tagMatch = bm.tags?.some((t) => t.toLowerCase().includes(q));
-
-      return titleMatch || urlMatch || descMatch || folderMatch || tagMatch;
-    });
-
-    if (activeTab === "recent") {
-      list = [...list]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 30);
-    }
-
-    return list;
-  }, [bookmarks, activeTab, searchQuery]);
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const allDisplayedSelected =
     displayedBookmarks.length > 0 &&
@@ -295,7 +243,7 @@ export function DashboardClient({
   ];
 
   return (
-    <div className="flex flex-col space-y-6">
+    <div className="flex flex-col space-y-4">
 
       {/* ── No device linked → show linking code ─────────────────────── */}
       {!hasLinkedDevice && (
@@ -303,7 +251,7 @@ export function DashboardClient({
           userId={userId}
           onLinked={() => {
             setHasLinkedDevice(true);
-            fetchBookmarks();
+            void fetchBookmarks(1, pageSize, searchQuery, activeTab);
           }}
         />
       )}
@@ -311,20 +259,20 @@ export function DashboardClient({
       {/* ── Device linked → Search & List Controls ─────────────────────── */}
       {hasLinkedDevice && (
         <div
-          className="bk-card p-3 sm:p-4 space-y-3 relative"
+          className="bk-card p-3 sm:p-4 space-y-2 relative"
           style={{ border: "1px solid var(--bk-border)" }}
         >
           {/* Sticky Header Controls Bar */}
           <div
-            className="sticky top-[68px] z-20 py-3 px-3 sm:px-4 -mx-3 sm:-mx-4 -mt-3 sm:-mt-4 mb-1 backdrop-blur-md rounded-t-[14px] transition-bk"
+            className="sticky top-[96px] z-20 py-2 px-3 sm:px-4 -mx-3 sm:-mx-4 -mt-3 sm:-mt-4 mb-1 backdrop-blur-md rounded-t-[14px] transition-bk md:top-[64px]"
             style={{
               background: "rgba(23, 30, 42, 0.96)",
               borderBottom: "1px solid var(--bk-border)",
             }}
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               {/* Search Input & Counter */}
-              <div className="flex items-center gap-3 flex-1 max-w-xl">
+              <div className="flex w-full items-center gap-3 sm:flex-1 sm:max-w-xl">
                 <div className="relative flex-1">
                   <SearchIcon
                     className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2"
@@ -335,7 +283,7 @@ export function DashboardClient({
                     placeholder="Search titles, URLs, tags, folders..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-8 py-2.5 text-xs rounded-[10px] outline-none transition-bk"
+                    className="w-full pl-10 pr-8 py-2 text-xs rounded-[10px] outline-none transition-bk"
                     style={{
                       background: "#0f1622",
                       border: "1px solid var(--bk-border)",
@@ -355,22 +303,11 @@ export function DashboardClient({
                   )}
                 </div>
 
-                {/* Bookmark Search Counter UX Badge */}
-                <span
-                  className="text-xs px-2.5 py-1.5 rounded-[8px] font-medium whitespace-nowrap hidden md:inline-block transition-bk"
-                  style={{
-                    background: "var(--bk-bg)",
-                    border: "1px solid var(--bk-border)",
-                    color: "var(--bk-text-muted)",
-                  }}
-                >
-                  Showing <strong style={{ color: "var(--bk-text-primary)" }}>{displayedBookmarks.length}</strong> of {bookmarks.length}
-                </span>
               </div>
 
               {/* Filter Tabs */}
               <div
-                className="inline-flex gap-1 p-1 rounded-[10px] self-start sm:self-auto"
+                className="inline-flex shrink-0 self-start gap-1 p-1 rounded-[10px] sm:self-auto"
                 style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)" }}
               >
                 {tabs.map((tab) => (
@@ -393,7 +330,7 @@ export function DashboardClient({
           </div>
 
           {/* Bookmark list */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 pt-1">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-1.5 pt-1">
             {loading ? (
               <SkeletonRows count={6} />
             ) : displayedBookmarks.length === 0 ? (
@@ -417,7 +354,7 @@ export function DashboardClient({
               displayedBookmarks.map((bm, i) => (
                 <div
                   key={bm.id}
-                  className="animate-fade-in-up"
+                  className="h-full animate-fade-in-up"
                   style={{ animationDelay: `${i * 20}ms` }}
                 >
                   <BookmarkRow
@@ -434,13 +371,77 @@ export function DashboardClient({
               ))
             )}
           </div>
+
+          {!loading && displayedBookmarks.length > 0 && (
+            <div
+              className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t pt-3"
+              style={{ borderColor: "var(--bk-border)" }}
+            >
+              <label className="flex items-center gap-2 text-xs" style={{ color: "var(--bk-text-muted)" }}>
+                <select
+                  value={pageSize}
+                  onChange={(event) => {
+                    setPageSize(Number(event.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="h-8 rounded-[7px] border px-2 text-xs outline-none"
+                  style={{
+                    background: "var(--bk-bg)",
+                    borderColor: "var(--bk-border)",
+                    color: "var(--bk-text-primary)",
+                  }}
+                  aria-label="Bookmarks per page"
+                >
+                  <option value={10}>10 per page</option>
+                  <option value={25}>25 per page</option>
+                  <option value={50}>50 per page</option>
+                </select>
+              </label>
+
+              <span className="text-xs font-medium" style={{ color: "var(--bk-text-muted)" }}>
+                {Math.min((currentPage - 1) * pageSize + 1, totalRecords)}-{Math.min(currentPage * pageSize, totalRecords)} of {totalRecords}
+              </span>
+
+              <div className="flex items-center gap-1.5" aria-label="Bookmark pages">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                  className="flex h-7 w-7 items-center justify-center rounded-[6px] border transition-bk disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{
+                    color: "var(--bk-text-muted)",
+                    borderColor: "var(--bk-border)",
+                    background: "var(--bk-bg)",
+                  }}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeftIcon className="h-3.5 w-3.5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage === totalPages}
+                  className="flex h-7 w-7 items-center justify-center rounded-[6px] border transition-bk disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{
+                    color: "var(--bk-text-muted)",
+                    borderColor: "var(--bk-border)",
+                    background: "var(--bk-bg)",
+                  }}
+                  aria-label="Next page"
+                >
+                  <ChevronRightIcon className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Bulk action bar (slides up when items selected) */}
       {selectedIds.size > 0 && (
         <div
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-[16px] shadow-2xl animate-slide-up max-w-xl w-full mx-auto"
+          className="fixed bottom-3 left-3 right-3 z-50 flex max-h-[min(70vh,260px)] flex-wrap items-center gap-2 overflow-y-auto rounded-[16px] px-3 py-3 shadow-2xl animate-slide-up sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-xl sm:-translate-x-1/2 sm:px-5"
           style={{
             background: "var(--bk-surface)",
             border: "1px solid var(--bk-border)",
@@ -469,7 +470,7 @@ export function DashboardClient({
             {selectedIds.size} selected
           </span>
 
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:ml-auto sm:w-auto">
             {/* Share Selected Bookmarks */}
             <button
               onClick={handleShare}
@@ -582,7 +583,7 @@ export function DashboardClient({
         userId={userId}
         deviceId={devices[0]?.id ?? ""}
         devices={devices}
-        onAdded={fetchBookmarks}
+        onAdded={() => fetchBookmarks(currentPage, pageSize, searchQuery, activeTab)}
       />
 
       {/* Bookmark Detail Modal */}
