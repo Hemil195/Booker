@@ -16,7 +16,6 @@ import {
   TagIcon,
   SparklesIcon,
   GlobeIcon,
-  RefreshCwIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -34,7 +33,6 @@ interface BookmarkDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (id: string) => void;
-  onRegenerated?: (bookmark: Partial<BookmarkWithDevice> & { id: string }) => void;
 }
 
 export function BookmarkDetailDialog({
@@ -42,31 +40,8 @@ export function BookmarkDetailDialog({
   open,
   onOpenChange,
   onDelete,
-  onRegenerated,
 }: BookmarkDetailDialogProps) {
   const [copied, setCopied] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [regenerateError, setRegenerateError] = useState<string | null>(null);
-
-  const handleRegenerate = async () => {
-    if (!bookmark || regenerating) return;
-    setRegenerating(true);
-    setRegenerateError(null);
-    try {
-      const response = await fetch("/api/recreate-description", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookmark_id: bookmark.id }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.bookmark) throw new Error(data.error || "Unable to regenerate description");
-      onRegenerated?.(data.bookmark);
-    } catch (error) {
-      setRegenerateError(error instanceof Error ? error.message : "Unable to regenerate description");
-    } finally {
-      setRegenerating(false);
-    }
-  };
 
   if (!bookmark) return null;
 
@@ -89,12 +64,10 @@ export function BookmarkDetailDialog({
           background: "var(--bk-surface)",
           border: "1px solid var(--bk-border)",
           borderRadius: "16px",
-          maxWidth: "540px",
-          width: "calc(100vw - 32px)",
-          maxHeight: "90vh",
+          maxWidth: "min(540px, calc(100vw - 24px))",
+          width: "calc(100vw - 24px)",
+          maxHeight: "calc(100dvh - 24px)",
           overflowY: "auto",
-          overflowX: "hidden",
-          minWidth: 0,
           boxSizing: "border-box",
           padding: "clamp(16px, 4vw, 24px)",
         }}
@@ -152,7 +125,7 @@ export function BookmarkDetailDialog({
 
         {/* URL section */}
         <div
-          className="flex items-center justify-between gap-2 p-3 rounded-[10px] my-3"
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-[10px] my-3"
           style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)" }}
         >
           <a
@@ -188,7 +161,7 @@ export function BookmarkDetailDialog({
             AI Summary & Description
           </div>
           <div
-            className="p-3.5 rounded-[10px] text-xs leading-relaxed break-words"
+            className="p-3.5 rounded-[10px] text-xs leading-relaxed"
             style={{
               background: "var(--bk-bg)",
               border: "1px solid var(--bk-border)",
@@ -200,17 +173,6 @@ export function BookmarkDetailDialog({
               ? "Generating AI description with NVIDIA Llama 3.1…"
               : bookmark.description || "No description available for this bookmark."}
           </div>
-          <button
-            type="button"
-            onClick={handleRegenerate}
-            disabled={regenerating || bookmark.description_pending}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-medium transition-bk"
-            style={{ background: "rgba(255,255,255,0.06)", color: "var(--bk-text-primary)", border: "1px solid var(--bk-border)" }}
-          >
-            <RefreshCwIcon className={`w-3.5 h-3.5 ${regenerating ? "animate-spin" : ""}`} />
-            {regenerating ? "Regenerating…" : "Regenerate this summary"}
-          </button>
-          {regenerateError && <p className="mt-1 text-xs break-words" style={{ color: "#fc8181" }}>{regenerateError}</p>}
         </div>
 
         {/* Tags */}
@@ -240,34 +202,34 @@ export function BookmarkDetailDialog({
 
         {/* Metadata Details Grid */}
         <div
-          className="grid grid-cols-2 gap-3 p-3.5 rounded-[10px] mb-5 text-xs"
+          className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-[10px] mb-5 text-xs"
           style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)" }}
         >
-          <div>
+          <div className="min-w-0">
             <span style={{ color: "var(--bk-text-muted)" }} className="block mb-0.5">
               <FolderIcon className="w-3 h-3 inline mr-1" /> Folder
             </span>
-            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium">
+            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium break-words">
               {bookmark.folder_path || "Root / Uncategorized"}
             </span>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <span style={{ color: "var(--bk-text-muted)" }} className="block mb-0.5">
               <LaptopIcon className="w-3 h-3 inline mr-1" /> Device
             </span>
-            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium">
+            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium break-words">
               {bookmark.device_name && bookmark.device_name !== "Pending Device"
                 ? `${bookmark.device_name} (${bookmark.browser || "Browser"})`
                 : `Linked Browser (${bookmark.browser && bookmark.browser !== "Unknown" ? bookmark.browser : "Synced"})`}
             </span>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <span style={{ color: "var(--bk-text-muted)" }} className="block mb-0.5">
               <ClockIcon className="w-3 h-3 inline mr-1" /> Saved On
             </span>
-            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium">
+            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium break-words">
               {formattedDate}
             </span>
           </div>
@@ -278,7 +240,7 @@ export function BookmarkDetailDialog({
             </span>
             <span
               style={{ color: "var(--bk-text-muted)" }}
-              className="font-mono text-[11px] truncate block"
+              className="font-mono text-[11px] break-all block"
             >
               {bookmark.id}
             </span>
@@ -286,13 +248,13 @@ export function BookmarkDetailDialog({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="flex flex-col-reverse sm:flex-row gap-2">
           <button
             onClick={() => {
               onDelete(bookmark.id);
               onOpenChange(false);
             }}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[8px] text-xs font-medium transition-bk"
+            className="flex w-full sm:w-auto items-center justify-center gap-1.5 px-4 py-2.5 rounded-[8px] text-xs font-medium transition-bk"
             style={{
               background: "rgba(239,68,68,0.12)",
               color: "#fc8181",
@@ -307,7 +269,7 @@ export function BookmarkDetailDialog({
             href={bookmark.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-[8px] text-xs font-semibold transition-bk"
+            className="flex flex-1 min-h-10 items-center justify-center gap-1.5 px-4 py-2.5 rounded-[8px] text-xs font-semibold transition-bk"
             style={{
               background: "var(--bk-accent)",
               color: "#09090b",

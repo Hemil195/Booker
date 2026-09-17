@@ -152,6 +152,27 @@ export function DashboardClient({
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
   };
 
+  const handleRegenerate = async (bookmark: BookmarkWithDevice) => {
+    setBookmarks((prev) => prev.map((item) =>
+      item.id === bookmark.id ? { ...item, description_pending: true } : item,
+    ));
+
+    try {
+      const response = await fetch("/api/recreate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmark_id: bookmark.id }),
+      });
+      if (!response.ok) throw new Error("Failed to regenerate bookmark summary");
+      await fetchBookmarks();
+    } catch (error) {
+      console.error("Failed to regenerate bookmark summary", error);
+      setBookmarks((prev) => prev.map((item) =>
+        item.id === bookmark.id ? { ...item, description_pending: false } : item,
+      ));
+    }
+  };
+
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
     await supabase
@@ -405,6 +426,7 @@ export function DashboardClient({
                     isSelectMode={selectedIds.size > 0}
                     onCheckedChange={toggleSelect}
                     onDelete={handleDelete}
+                    onRegenerate={handleRegenerate}
                     onSelect={(b) => setDetailBookmark(b)}
                     index={i}
                   />
@@ -569,10 +591,6 @@ export function DashboardClient({
         open={!!detailBookmark}
         onOpenChange={(open) => !open && setDetailBookmark(null)}
         onDelete={handleDelete}
-        onRegenerated={(updated) => {
-          setBookmarks((previous) => previous.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
-          setDetailBookmark((current) => current ? { ...current, ...updated } : current);
-        }}
       />
     </div>
   );

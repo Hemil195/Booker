@@ -484,10 +484,6 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
         open={!!detailBookmark}
         onOpenChange={(open) => !open && setDetailBookmark(null)}
         onDelete={handleDelete}
-        onRegenerated={(updated) => {
-          setBookmarks((previous) => previous.map((item) => item.id === updated.id ? { ...item, ...updated } : item));
-          setDetailBookmark((current) => current ? { ...current, ...updated } : current);
-        }}
       />
 
       {/* Create Folder Modal */}

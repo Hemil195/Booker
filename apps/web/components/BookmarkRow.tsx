@@ -14,6 +14,7 @@ import {
   BotIcon,
   ClockIcon,
   InfoIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +34,7 @@ interface BookmarkRowProps {
   onCheckedChange: (id: string, checked: boolean) => void;
   onDelete: (id: string) => void;
   onSelect?: (bookmark: BookmarkWithDevice) => void;
+  onRegenerate?: (bookmark: BookmarkWithDevice) => void;
   index?: number;
 }
 
@@ -56,6 +58,7 @@ export function BookmarkRow({
   onCheckedChange,
   onDelete,
   onSelect,
+  onRegenerate,
   index = 0,
 }: BookmarkRowProps) {
   const [hovered, setHovered] = useState(false);
@@ -238,6 +241,10 @@ export function BookmarkRow({
             <DropdownMenuItem onClick={() => window.open(bookmark.url, "_blank", "noopener,noreferrer")}>
               <ExternalLinkIcon className="w-3.5 h-3.5 mr-2" />
               Open link
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onRegenerate?.(bookmark)} disabled={bookmark.description_pending}>
+              <RefreshCwIcon className="w-3.5 h-3.5 mr-2" />
+              Regenerate AI summary
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-red-400 focus:text-red-400"

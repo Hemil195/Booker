@@ -49,28 +49,15 @@ export async function POST(req: NextRequest) {
 
   // Build all rows for instant bulk upsert
   const validBookmarks = bookmarks.filter((bm) => bm.url && (bm.url.startsWith("http://") || bm.url.startsWith("https://")));
-  const requestedUrls = validBookmarks.map((bm) => bm.url);
-  const { data: existingRows } = await supabase
-    .from("bookmarks")
-    .select("id, url, description, tags, description_pending")
-    .eq("user_id", auth.userId)
-    .in("url", requestedUrls);
-  const existingByUrl = new Map(
-    (existingRows ?? []).map((row) => [row.url, row]),
-  );
-
   const rawRows = validBookmarks.map((bm) => ({
     user_id: auth.userId,
     device_id: auth.deviceId,
     url: bm.url,
     title: bm.title || bm.url,
     folder_path: bm.folder_path || null,
-    description: existingByUrl.get(bm.url)?.description ?? null,
-    tags: existingByUrl.get(bm.url)?.tags ?? [],
     browser_bookmark_id: bm.browser_bookmark_id || null,
     source: "browser" as const,
-    // Do not requeue completed AI work when the extension sends a backfill again.
-    description_pending: existingByUrl.get(bm.url)?.description_pending ?? true,
+    description_pending: true,
     updated_at: new Date().toISOString(),
     deleted_at: null,
   }));
@@ -100,18 +87,7 @@ export async function POST(req: NextRequest) {
 
     if (!error && data) {
       insertedCount += data.length;
-      data.forEach((item: any) => {
-        const row = existingByUrl.get(item.url);
-        if (!row || row.description_pending) {
-          const source = rows.find((candidate) => candidate.url === item.url);
-          savedBookmarkRecords.push({
-            id: item.id,
-            url: item.url,
-            title: item.title,
-            folder_path: source?.folder_path,
-          });
-        }
-      });
+      data.forEach((item: any) => savedBookmarkRecords.push(item));
     } else if (error) {
       console.warn("Batch upsert notice, running resilient fallback:", error.message);
       // Resilient fallback if unique constraint is absent
@@ -136,9 +112,7 @@ export async function POST(req: NextRequest) {
             .eq("id", existing.id);
           if (!updateErr) {
             insertedCount++;
-            if (existingByUrl.get(row.url)?.description_pending) {
-              savedBookmarkRecords.push({ id: existing.id, url: row.url, title: row.title, folder_path: row.folder_path });
-            }
+            savedBookmarkRecords.push({ id: existing.id, url: row.url, title: row.title });
           }
         } else {
           const { data: inserted, error: insertErr } = await supabase
@@ -162,7 +136,7 @@ export async function POST(req: NextRequest) {
     .eq("id", auth.deviceId);
 
   // Process AI descriptions in parallel chunks
-  const BATCH_AI_SIZE = 3;
+  const BATCH_AI_SIZE = 5;
   for (let i = 0; i < savedBookmarkRecords.length; i += BATCH_AI_SIZE) {
     const chunk = savedBookmarkRecords.slice(i, i + BATCH_AI_SIZE);
     await Promise.all(

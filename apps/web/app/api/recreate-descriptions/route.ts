@@ -9,7 +9,7 @@ import { createSupabaseAdminClient } from "@/lib/supabaseClient";
 import { processBookmarkAiDescription } from "@/lib/aiIngest";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function POST() {
   const supabaseServer = await createSupabaseServerClient();
@@ -49,7 +49,7 @@ export async function POST() {
       .in("id", ids);
 
     // Process in fast parallel chunks of 5 with Promise.all
-    const BATCH_SIZE = 3;
+    const BATCH_SIZE = 5;
     for (let i = 0; i < bookmarks.length; i += BATCH_SIZE) {
       const chunk = bookmarks.slice(i, i + BATCH_SIZE);
       await Promise.all(

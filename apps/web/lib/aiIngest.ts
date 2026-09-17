@@ -164,7 +164,7 @@ async function fetchPageMeta(url: string): Promise<{
         signal: AbortSignal.timeout(12000),
         headers: { Accept: "text/plain", "User-Agent": "BookarBot/1.0" },
       });
-      if (readerResponse.ok) return { content: (await readerResponse.text()).slice(0, 5000) };
+      if (readerResponse.ok) return { content: (await readerResponse.text()).slice(0, 8000) };
       return {};
     }
     const html = (await res.text()).slice(0, 1_500_000);
@@ -198,7 +198,7 @@ async function fetchPageMeta(url: string): Promise<{
     return {
       title: titleMatch ? cleanText(titleMatch[1]) : undefined,
       description: genericSiteDescription ? undefined : ogDesc || metaDesc,
-      content: [pathText, headings, paragraphs || cleanText(articleRoot).slice(0, 4_000)].filter(Boolean).join(" ").slice(0, 4_500),
+      content: [pathText, headings, paragraphs || cleanText(articleRoot).slice(0, 4_000)].filter(Boolean).join(" ").slice(0, 5_000),
     };
   } catch {
     return {};
@@ -234,67 +234,59 @@ export async function processBookmarkAiDescription(
     if (NVIDIA_API_KEY) {
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 45000);
+        const timeout = setTimeout(() => controller.abort(), 60000);
 
-            const prompt = `You are Bookar's bookmark summarizer. Analyze the supplied webpage evidence and write for a normal human reader.
-          Use ONLY the evidence below. The saved bookmark title and URL path identify the specific article and take priority over generic website branding or site-wide descriptions. Never summarize the website brand when the title identifies a specific article.
-URL: ${url}
-      URL topic/path: ${urlPath || "(none)"}
-Saved bookmark title: ${contextTitle}
-Fetched page title: ${meta.title || "(unavailable)"}
-      Metadata description: ${contextDesc || "(none)"}
-      Visible page text: ${pageContent || "(none)"}
+        const prompt = `Article title: ${contextTitle}
+        Article URL path: ${urlPath || "(none)"}
+        Article text: ${pageContent || "(none)"}
 
-Task:
-      1. Write exactly 2 or 3 short sentences in clear, friendly English. Explain what the page is, what a user can do there, and why it may be useful.
-      2. Provide 3 to 6 specific lower-case tags. Do not use generic tags such as website, page, resource, or saved.
-      3. Choose one folder category from: AI & Tools, Development, Design, Learning, Productivity, Business, Government, Media, Finance, Travel, Shopping, News, Health, or Other.
+        Return exactly one compact JSON object and nothing else. Do not write analysis or reasoning. The description must be exactly two short plain-English sentences about this specific article, not the website brand. Use 3-5 specific lowercase tags and one category from: AI & Tools, Development, Design, Learning, Productivity, Business, Government, Media, Finance, Travel, Shopping, News, Health, Other.
+        JSON keys: description, tags, folder.`;
 
-Respond ONLY with valid JSON in this exact structure:
-      {"description":"...","tags":["tag1","tag2"],"folder":"Development"}`;
+        try {
+          const llmRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            signal: controller.signal,
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${NVIDIA_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: NVIDIA_MODEL,
+              messages: [
+                {
+                  role: "system",
+                  content: "Return only the requested JSON object. Do not include a preamble, analysis, Markdown, or code fences.",
+                },
+                { role: "user", content: prompt },
+              ],
+              temperature: 0,
+              response_format: { type: "json_object" },
+            }),
+          });
 
-        const llmRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-          signal: controller.signal,
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${NVIDIA_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: NVIDIA_MODEL,
-            messages: [
-              {
-                role: "system",
-                content: "Return only the requested JSON object. Do not include a preamble, analysis, Markdown, or code fences.",
-              },
-              { role: "user", content: prompt },
-            ],
-            temperature: 0.2,
-            max_tokens: 400,
-            response_format: { type: "json_object" },
-          }),
-        });
-        clearTimeout(timeout);
-
-        if (llmRes.ok) {
-          const llmData = await llmRes.json();
-          const content = llmData.choices?.[0]?.message?.content ?? "";
-          const parsed = parseModelJson(content);
-          if (parsed) {
-            if (parsed.description) aiDescription = normalizeDescription(parsed.description, fallbackDescription);
-            if (Array.isArray(parsed.tags) && parsed.tags.length > 0) {
-              modelTags = parsed.tags;
+          if (llmRes.ok) {
+            const llmData = await llmRes.json();
+            const content = llmData.choices?.[0]?.message?.content ?? "";
+            const parsed = parseModelJson(content);
+            if (parsed) {
+              if (parsed.description) aiDescription = normalizeDescription(parsed.description, fallbackDescription);
+              if (Array.isArray(parsed.tags) && parsed.tags.length > 0) {
+                modelTags = parsed.tags;
+              }
+              modelCategory = parsed.folder;
             }
-            modelCategory = parsed.folder;
+          } else {
+            console.warn("NVIDIA summary request failed", llmRes.status, await llmRes.text());
           }
-        } else {
-          console.warn("NVIDIA summary request failed", llmRes.status, await llmRes.text());
+        } finally {
+          clearTimeout(timeout);
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
-          console.warn("NVIDIA summary timed out for", url);
+          console.warn("NVIDIA summary request timed out; using fallback description", url);
         } else {
-          console.warn("NVIDIA LLM call notice for", url, err);
+          console.warn("NVIDIA LLM call failed for", url, err);
         }
       }
     }
