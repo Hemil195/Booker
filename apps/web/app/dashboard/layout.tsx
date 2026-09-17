@@ -20,9 +20,9 @@ export default async function DashboardLayout({
   if (!user) redirect("/login");
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "var(--bk-bg)" }}>
+    <div className="bk-dashboard-shell min-h-screen flex flex-col">
       <Navbar user={user} />
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6">
+      <main className="flex-1 max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-5">
         {children}
       </main>
     </div>

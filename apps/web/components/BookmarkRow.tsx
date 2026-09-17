@@ -15,6 +15,7 @@ import {
   ClockIcon,
   InfoIcon,
   RefreshCwIcon,
+  SparklesIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,15 +75,16 @@ export function BookmarkRow({
 
   return (
     <div
-      className="flex items-start gap-3 px-4 py-3 rounded-[10px] group transition-bk cursor-pointer select-none"
+      className="flex h-full items-start gap-3 px-3 sm:px-4 py-3 rounded-[11px] group transition-bk cursor-pointer select-none"
       style={{
-        border: "1px solid transparent",
-        borderColor: checked ? "rgba(255,255,255,0.25)" : "transparent",
+        border: "1px solid var(--bk-border)",
+        borderColor: checked ? "var(--bk-accent)" : "var(--bk-border)",
         backgroundColor: checked
-          ? "rgba(255,255,255,0.06)"
+          ? "rgba(215,189,121,0.12)"
           : hovered
-          ? "rgba(255,255,255,0.03)"
-          : "transparent",
+          ? "rgba(37,49,67,0.92)"
+          : "rgba(23,30,42,0.88)",
+        boxShadow: "var(--bk-shadow-card)",
         animationDelay: `${index * 20}ms`,
       }}
       onMouseEnter={() => setHovered(true)}
@@ -120,7 +122,7 @@ export function BookmarkRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">
           <span
-            className="text-sm font-medium leading-snug transition-bk line-clamp-1"
+            className="text-sm font-semibold leading-snug transition-bk line-clamp-2"
             style={{ color: "var(--bk-text-primary)" }}
           >
             {bookmark.title ?? bookmark.url}
@@ -194,10 +196,10 @@ export function BookmarkRow({
 
       {/* Hover action buttons (Open Link & Kebab Menu) */}
       <div
-        className="flex items-center gap-1.5 flex-shrink-0"
+        className="flex flex-col items-stretch gap-1.5 flex-shrink-0"
         style={{
-          opacity: hovered || checked ? 1 : 0,
-          transition: "opacity var(--bk-ease)",
+          opacity: 1,
+          minWidth: "96px",
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -207,7 +209,7 @@ export function BookmarkRow({
             e.stopPropagation();
             window.open(bookmark.url, "_blank", "noopener,noreferrer");
           }}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-[6px] text-xs font-medium transition-bk"
+          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-[6px] text-xs font-medium transition-bk"
           style={{
             background: "rgba(255,255,255,0.08)",
             color: "var(--bk-text-primary)",
@@ -216,7 +218,25 @@ export function BookmarkRow({
           title="Open link in new tab"
         >
           <ExternalLinkIcon className="w-3 h-3" />
-          <span className="text-[11px]">Open link</span>
+          <span className="text-[11px]">Open Link</span>
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRegenerate?.(bookmark);
+          }}
+          disabled={!onRegenerate || bookmark.description_pending}
+          className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-[6px] text-xs font-medium transition-bk disabled:opacity-50"
+          style={{
+            background: "rgba(215,189,121,0.08)",
+            color: "var(--bk-accent)",
+            border: "1px solid var(--bk-border)",
+          }}
+          title="Regenerate AI summary"
+        >
+          <SparklesIcon className="w-3 h-3" />
+          <span className="text-[11px]">AI Summary</span>
         </button>
 
         {/* Kebab dropdown menu */}

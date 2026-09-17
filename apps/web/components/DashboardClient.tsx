@@ -311,20 +311,20 @@ export function DashboardClient({
       {/* ── Device linked → Search & List Controls ─────────────────────── */}
       {hasLinkedDevice && (
         <div
-          className="bk-card p-5 space-y-4 relative"
+          className="bk-card p-3 sm:p-4 space-y-3 relative"
           style={{ border: "1px solid var(--bk-border)" }}
         >
           {/* Sticky Header Controls Bar */}
           <div
-            className="sticky top-16 z-20 py-3.5 px-5 -mx-5 -mt-5 mb-2 backdrop-blur-md rounded-t-[14px] transition-bk"
+            className="sticky top-[68px] z-20 py-3 px-3 sm:px-4 -mx-3 sm:-mx-4 -mt-3 sm:-mt-4 mb-1 backdrop-blur-md rounded-t-[14px] transition-bk"
             style={{
-              background: "rgba(24, 24, 27, 0.95)",
+              background: "rgba(23, 30, 42, 0.96)",
               borderBottom: "1px solid var(--bk-border)",
             }}
           >
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               {/* Search Input & Counter */}
-              <div className="flex items-center gap-3 flex-1 max-w-lg">
+              <div className="flex items-center gap-3 flex-1 max-w-xl">
                 <div className="relative flex-1">
                   <SearchIcon
                     className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2"
@@ -337,7 +337,7 @@ export function DashboardClient({
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-8 py-2.5 text-xs rounded-[10px] outline-none transition-bk"
                     style={{
-                      background: "var(--bk-bg)",
+                      background: "#0f1622",
                       border: "1px solid var(--bk-border)",
                       color: "var(--bk-text-primary)",
                     }}
@@ -379,7 +379,7 @@ export function DashboardClient({
                     onClick={() => setActiveTab(tab.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-xs font-medium transition-bk"
                     style={{
-                      background: activeTab === tab.id ? "var(--bk-surface)" : "transparent",
+                      background: activeTab === tab.id ? "var(--bk-selection)" : "transparent",
                       color: activeTab === tab.id ? "var(--bk-accent)" : "var(--bk-text-muted)",
                       border: activeTab === tab.id ? "1px solid var(--bk-border)" : "1px solid transparent",
                     }}
@@ -393,7 +393,7 @@ export function DashboardClient({
           </div>
 
           {/* Bookmark list */}
-          <div className="space-y-[2px] pt-1">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 pt-1">
             {loading ? (
               <SkeletonRows count={6} />
             ) : displayedBookmarks.length === 0 ? (

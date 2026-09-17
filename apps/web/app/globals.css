@@ -4,17 +4,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Bookar Design Tokens (monochrome black-to-white shades) ─────────────────── */
+/* ── Bookar Design Tokens ──────────────────────────────────────────────────── */
 :root {
   /* Core palette */
-  --bk-bg:           #09090b;
-  --bk-surface:      #18181b;
-  --bk-accent:       #ffffff;
-  --bk-accent-hover: #e4e4e7;
-  --bk-selection:    rgba(255, 255, 255, 0.08);
-  --bk-text-primary: #fafafa;
-  --bk-text-muted:   #a1a1aa;
-  --bk-border:       rgba(255, 255, 255, 0.12);
+  --bk-bg:           #0b111b;
+  --bk-surface:      #171e2a;
+  --bk-accent:       #d7bd79;
+  --bk-accent-hover: #ead497;
+  --bk-selection:    rgba(215, 189, 121, 0.18);
+  --bk-text-primary: #f3f4f6;
+  --bk-text-muted:   #9ca8b8;
+  --bk-border:       rgba(160, 177, 201, 0.28);
 
   /* Radii */
   --bk-radius-card:    14px;
@@ -25,7 +25,7 @@
   --bk-ease-long:     220ms ease-out;
 
   /* Shadows */
-  --bk-shadow-card: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+  --bk-shadow-card: 0 8px 24px rgba(0,0,0,0.16);
 
   /* Mapped to shadcn CSS var names */
   --card:           oklch(0.145 0 0);
@@ -277,4 +277,13 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+.bk-dashboard-shell {
+  background-color: var(--bk-bg);
+  background-image:
+    linear-gradient(rgba(80, 107, 143, 0.09) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(80, 107, 143, 0.09) 1px, transparent 1px),
+    radial-gradient(circle at 50% -20%, rgba(74, 105, 143, 0.16), transparent 48%);
+  background-size: 16px 16px, 16px 16px, 100% 100%;
 }

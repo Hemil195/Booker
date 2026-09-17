@@ -56,11 +56,11 @@ export function Navbar({ user }: NavbarProps) {
       <header
         className="sticky top-0 z-40 w-full backdrop-blur-md transition-bk"
         style={{
-          background: "rgba(24, 24, 27, 0.85)",
+          background: "rgba(11, 17, 27, 0.92)",
           borderBottom: "1px solid var(--bk-border)",
         }}
       >
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+        <div className="max-w-[1440px] w-full mx-auto px-3 sm:px-6 lg:px-8 h-[68px] flex items-center justify-between gap-3">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2.5 group">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -78,17 +78,17 @@ export function Navbar({ user }: NavbarProps) {
           </Link>
 
           {/* Centered Nav Links */}
-          <nav className="flex items-center gap-1.5 p-1 rounded-[10px]" style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)" }}>
+          <nav className="hidden md:flex items-center gap-1 p-1 rounded-[10px]" style={{ background: "rgba(23,30,42,0.82)", border: "1px solid var(--bk-border)" }}>
             {navLinks.map(({ label, href, icon: Icon }) => {
               const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
               return (
                 <Link
                   key={href}
                   href={href}
-                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-[8px] text-xs font-medium transition-bk"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[7px] text-xs font-medium transition-bk"
                   style={{
                     background: active ? "var(--bk-selection)" : "transparent",
-                    color: active ? "var(--bk-text-primary)" : "var(--bk-text-muted)",
+                    color: active ? "var(--bk-accent)" : "var(--bk-text-muted)",
                     border: active ? "1px solid var(--bk-border)" : "1px solid transparent",
                   }}
                 >
@@ -104,7 +104,7 @@ export function Navbar({ user }: NavbarProps) {
             {/* Quick Add Button */}
             <button
               onClick={() => setAddDialogOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-xs font-semibold transition-bk"
+              className="hidden sm:flex h-10 items-center gap-1.5 px-3.5 rounded-[8px] text-xs font-semibold transition-bk"
               style={{
                 background: "var(--bk-accent)",
                 color: "#09090b",
@@ -119,7 +119,7 @@ export function Navbar({ user }: NavbarProps) {
             {/* Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger
-                className="flex items-center gap-2 p-1.5 rounded-[8px] transition-bk cursor-pointer outline-none"
+                className="flex h-10 items-center gap-2 px-2 rounded-[8px] transition-bk cursor-pointer outline-none"
                 style={{ background: "transparent", border: "1px solid var(--bk-border)" }}
                 onMouseEnter={(e) =>
                   ((e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)")
