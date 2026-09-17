@@ -16,6 +16,7 @@ import {
   TagIcon,
   SparklesIcon,
   GlobeIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,6 +34,7 @@ interface BookmarkDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (id: string) => void;
+  onRegenerated?: (bookmark: Partial<BookmarkWithDevice> & { id: string }) => void;
 }
 
 export function BookmarkDetailDialog({
@@ -40,8 +42,31 @@ export function BookmarkDetailDialog({
   open,
   onOpenChange,
   onDelete,
+  onRegenerated,
 }: BookmarkDetailDialogProps) {
   const [copied, setCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+
+  const handleRegenerate = async () => {
+    if (!bookmark || regenerating) return;
+    setRegenerating(true);
+    setRegenerateError(null);
+    try {
+      const response = await fetch("/api/recreate-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmark_id: bookmark.id }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.bookmark) throw new Error(data.error || "Unable to regenerate description");
+      onRegenerated?.(data.bookmark);
+    } catch (error) {
+      setRegenerateError(error instanceof Error ? error.message : "Unable to regenerate description");
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   if (!bookmark) return null;
 
@@ -68,8 +93,10 @@ export function BookmarkDetailDialog({
           width: "calc(100vw - 32px)",
           maxHeight: "90vh",
           overflowY: "auto",
+          overflowX: "hidden",
+          minWidth: 0,
           boxSizing: "border-box",
-          padding: "24px",
+          padding: "clamp(16px, 4vw, 24px)",
         }}
       >
         <DialogHeader className="mb-2">
@@ -132,7 +159,7 @@ export function BookmarkDetailDialog({
             href={bookmark.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-mono truncate hover:underline flex-1 min-w-0"
+            className="text-xs font-mono break-all hover:underline flex-1 min-w-0"
             style={{
               color: "var(--bk-text-primary)",
               fontFamily: "var(--font-geist-mono, monospace)",
@@ -161,7 +188,7 @@ export function BookmarkDetailDialog({
             AI Summary & Description
           </div>
           <div
-            className="p-3.5 rounded-[10px] text-xs leading-relaxed"
+            className="p-3.5 rounded-[10px] text-xs leading-relaxed break-words"
             style={{
               background: "var(--bk-bg)",
               border: "1px solid var(--bk-border)",
@@ -173,6 +200,17 @@ export function BookmarkDetailDialog({
               ? "Generating AI description with NVIDIA Llama 3.1…"
               : bookmark.description || "No description available for this bookmark."}
           </div>
+          <button
+            type="button"
+            onClick={handleRegenerate}
+            disabled={regenerating || bookmark.description_pending}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-medium transition-bk"
+            style={{ background: "rgba(255,255,255,0.06)", color: "var(--bk-text-primary)", border: "1px solid var(--bk-border)" }}
+          >
+            <RefreshCwIcon className={`w-3.5 h-3.5 ${regenerating ? "animate-spin" : ""}`} />
+            {regenerating ? "Regenerating…" : "Regenerate this summary"}
+          </button>
+          {regenerateError && <p className="mt-1 text-xs break-words" style={{ color: "#fc8181" }}>{regenerateError}</p>}
         </div>
 
         {/* Tags */}
@@ -248,7 +286,7 @@ export function BookmarkDetailDialog({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={() => {
               onDelete(bookmark.id);
