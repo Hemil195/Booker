@@ -206,6 +206,88 @@ async function backfillAllBookmarks() {
 // Sync pending web-added bookmarks down into Chrome browser bookmarks
 // Called ON-DEMAND when web-add occurs (NO INTERVAL POLLING)
 // ---------------------------------------------------------------------------
+async function findOrCreateBrowserFolder(folderPath) {
+  const parts = folderPath.split("/").map((part) => part.trim()).filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const tree = await chrome.bookmarks.getTree();
+  let matchedFolderId = null;
+
+  const findPath = (nodes, parentPath = []) => {
+    for (const node of nodes) {
+      if (node.url) continue;
+      const path = [
+        ...parentPath,
+        ...(["0", "1", "2"].includes(node.id) ? [] : [node.title]),
+      ];
+      if (path.join("/") === parts.join("/")) {
+        matchedFolderId = node.id;
+        return true;
+      }
+      if (node.children && findPath(node.children, path)) return true;
+    }
+    return false;
+  };
+
+  findPath(tree);
+  if (matchedFolderId) return matchedFolderId;
+
+  const [otherBookmarks] = await chrome.bookmarks.get("2");
+  let parentId = otherBookmarks?.id;
+  for (const part of parts) {
+    const children = await chrome.bookmarks.getChildren(parentId);
+    let folder = children.find((child) => !child.url && child.title === part);
+    if (!folder) {
+      folder = await chrome.bookmarks.create({ parentId, title: part });
+    }
+    parentId = folder.id;
+  }
+  return parentId;
+}
+
+async function applyDashboardChanges(changes) {
+  for (const change of changes ?? []) {
+    try {
+      let bookmark;
+      try {
+        [bookmark] = await chrome.bookmarks.get(change.browser_bookmark_id);
+      } catch {
+        bookmark = null;
+      }
+
+      if (!bookmark) {
+        if (!change.deleted_at) {
+          await syncBookmark({
+            event: "deleted",
+            browser_bookmark_id: change.browser_bookmark_id,
+            url: change.url,
+          });
+        }
+        continue;
+      }
+
+      if (change.deleted_at) {
+        await chrome.bookmarks.remove(bookmark.id);
+        continue;
+      }
+
+      const updatedFields = {};
+      if (bookmark.title !== (change.title || change.url)) updatedFields.title = change.title || change.url;
+      if (bookmark.url !== change.url) updatedFields.url = change.url;
+      if (Object.keys(updatedFields).length > 0) {
+        await chrome.bookmarks.update(bookmark.id, updatedFields);
+      }
+
+      if (change.folder_path && await getFolderPath(bookmark.parentId) !== change.folder_path) {
+        const parentId = await findOrCreateBrowserFolder(change.folder_path);
+        if (parentId) await chrome.bookmarks.move(bookmark.id, { parentId });
+      }
+    } catch (err) {
+      console.warn("Bookar: Failed to apply dashboard bookmark change:", err);
+    }
+  }
+}
+
 async function syncWebToBrowser() {
   const apiKey = await getApiKey();
   if (!apiKey) return;
@@ -223,10 +305,9 @@ async function syncWebToBrowser() {
     }
 
     if (!res.ok) return;
-    const { bookmarks } = await res.json();
-    if (!bookmarks || bookmarks.length === 0) return;
+    const { bookmarks, changes } = await res.json();
 
-    for (const bm of bookmarks) {
+    for (const bm of bookmarks ?? []) {
       try {
         const createdNode = await chrome.bookmarks.create({
           title: bm.title || bm.url,
@@ -249,6 +330,8 @@ async function syncWebToBrowser() {
         console.warn("Bookar: Failed to add bookmark into Chrome:", err);
       }
     }
+
+    await applyDashboardChanges(changes);
   } catch (err) {
     console.error("Bookar: Web sync to browser error:", err);
   }
@@ -332,6 +415,23 @@ chrome.bookmarks.onChanged.addListener(async (id, changeInfo) => {
     });
   } catch (err) {
     console.error("Bookar: bookmark update error:", err);
+  }
+});
+
+chrome.bookmarks.onMoved.addListener(async (id) => {
+  try {
+    const [bookmark] = await chrome.bookmarks.get(id);
+    if (!bookmark.url) return;
+    const folderPath = await getFolderPath(bookmark.parentId);
+    await syncBookmark({
+      event: "updated",
+      browser_bookmark_id: bookmark.id,
+      url: bookmark.url,
+      title: bookmark.title,
+      folder_path: folderPath,
+    });
+  } catch (err) {
+    console.error("Bookar: bookmark move sync error:", err);
   }
 });
 

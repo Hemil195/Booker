@@ -67,30 +67,21 @@ export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
     setCode(null);
     setErrorMessage(null);
 
-    // Generate a random 6-digit code
-    const newCode = String(Math.floor(100000 + Math.random() * 900000));
-    const expiresAtDate = new Date(Date.now() + 10 * 60 * 1000); // 10 min
-
-    // Create a device row with the linking code
-    const { data: deviceData, error } = await supabase
-      .from("devices")
-      .insert({
-        user_id: userId,
-        device_name: "Pending Device",
-        browser: "Unknown",
-        linking_code: newCode,
-        linking_code_expires_at: expiresAtDate.toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (error || !deviceData) {
-      setErrorMessage(error?.message ?? "Unable to create a browser-linking record.");
+    let deviceId: string;
+    try {
+      const response = await fetch("/api/create-link-code", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok || !result.device_id || !result.linking_code) {
+        throw new Error(result.error ?? "Unable to create a browser-linking record.");
+      }
+      deviceId = result.device_id;
+      setCode(result.linking_code);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to create a browser-linking record.");
       setState("error");
       return;
     }
 
-    setCode(newCode);
     setSecondsLeft(600);
     setState("active");
 
@@ -99,7 +90,7 @@ export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
       const { data } = await supabase
         .from("devices")
         .select("api_key_hash, linking_code")
-        .eq("id", deviceData.id)
+        .eq("id", deviceId)
         .single();
 
       if (data?.api_key_hash && !data.linking_code) {

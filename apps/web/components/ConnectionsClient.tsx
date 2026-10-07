@@ -29,7 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { createSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { LinkingCodeCard } from "@/components/EmptyState";
 
 interface DeviceItem {
   id: string;
@@ -160,10 +160,11 @@ function RevealKey({ rawKey }: { rawKey: string }) {
   );
 }
 
-export function ConnectionsClient({ allDevices: initialDevices }: ConnectionsClientProps) {
-  const supabase = createSupabaseBrowserClient();
+export function ConnectionsClient({ userId, allDevices: initialDevices }: ConnectionsClientProps) {
   const [devicesList, setDevicesList] = useState<DeviceItem[]>(initialDevices);
   const [generatingKey, setGeneratingKey] = useState(false);
+  const [revokingDevice, setRevokingDevice] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
   const [restExpanded, setRestExpanded] = useState(false);
   const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
@@ -200,9 +201,24 @@ export function ConnectionsClient({ allDevices: initialDevices }: ConnectionsCli
   }, []);
 
   const handleRevoke = async (id: string) => {
-    await supabase.from("devices").delete().eq("id", id);
-    setDevicesList((prev) => prev.filter((k) => k.id !== id));
-    setRevokeTarget(null);
+    setRevokingDevice(true);
+    setRevokeError(null);
+    try {
+      const response = await fetch("/api/revoke-device", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device_id: id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to revoke device");
+
+      setDevicesList((prev) => prev.filter((device) => device.id !== id));
+      setRevokeTarget(null);
+    } catch (error) {
+      setRevokeError(error instanceof Error ? error.message : "Failed to revoke device");
+    } finally {
+      setRevokingDevice(false);
+    }
   };
 
   const claudeConfig = (key: string) => `{
@@ -309,6 +325,10 @@ export function ConnectionsClient({ allDevices: initialDevices }: ConnectionsCli
           </div>
         )}
       </div>
+
+      {browserDevices.length === 0 && (
+        <LinkingCodeCard userId={userId} onLinked={() => window.location.reload()} />
+      )}
 
       {/* ── SECTION 2: MCP Server URL ─────────────────────────────────────── */}
       <div className="bk-card p-5" style={{ border: "1px solid var(--bk-border)" }}>
@@ -565,8 +585,13 @@ export function ConnectionsClient({ allDevices: initialDevices }: ConnectionsCli
             <DialogTitle style={{ color: "var(--bk-text-primary)" }}>Unlink device or key?</DialogTitle>
           </DialogHeader>
           <p className="text-xs mb-4" style={{ color: "var(--bk-text-muted)", lineHeight: "1.6" }}>
-            The connected browser or AI tool using this key will be disconnected immediately.
+            This revokes the connection immediately. Saved bookmarks remain in Bookar; the browser extension can be linked again with a new code.
           </p>
+          {revokeError && (
+            <p className="text-xs mb-3" role="alert" style={{ color: "#fc8181" }}>
+              {revokeError}
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               onClick={() => setRevokeTarget(null)}
@@ -577,10 +602,11 @@ export function ConnectionsClient({ allDevices: initialDevices }: ConnectionsCli
             </button>
             <button
               onClick={() => revokeTarget && handleRevoke(revokeTarget)}
+              disabled={revokingDevice}
               className="flex-1 py-2 rounded-[8px] text-xs font-semibold transition-bk"
-              style={{ background: "rgba(239,68,68,0.15)", color: "#fc8181", border: "1px solid rgba(239,68,68,0.3)" }}
+              style={{ background: "rgba(239,68,68,0.15)", color: "#fc8181", border: "1px solid rgba(239,68,68,0.3)", opacity: revokingDevice ? 0.6 : 1 }}
             >
-              Revoke
+              {revokingDevice ? "Revoking…" : "Revoke"}
             </button>
           </div>
         </DialogContent>

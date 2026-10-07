@@ -63,6 +63,7 @@ export function DashboardClient({
   const [shareCopied, setShareCopied] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [detailBookmark, setDetailBookmark] = useState<BookmarkWithDevice | null>(null);
+  const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [newFolderName, setNewFolderName] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -122,6 +123,7 @@ export function DashboardClient({
   };
 
   const handleRegenerate = async (bookmark: BookmarkWithDevice) => {
+    setRegeneratingIds((prev) => new Set(prev).add(bookmark.id));
     setBookmarks((prev) => prev.map((item) =>
       item.id === bookmark.id ? { ...item, description_pending: true } : item,
     ));
@@ -139,6 +141,12 @@ export function DashboardClient({
       setBookmarks((prev) => prev.map((item) =>
         item.id === bookmark.id ? { ...item, description_pending: false } : item,
       ));
+    } finally {
+      setRegeneratingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(bookmark.id);
+        return next;
+      });
     }
   };
 
@@ -364,6 +372,7 @@ export function DashboardClient({
                     onCheckedChange={toggleSelect}
                     onDelete={handleDelete}
                     onRegenerate={handleRegenerate}
+                    isRegenerating={regeneratingIds.has(bm.id)}
                     onSelect={(b) => setDetailBookmark(b)}
                     index={i}
                   />

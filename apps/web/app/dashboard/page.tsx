@@ -18,6 +18,7 @@ export default async function DashboardPage() {
       .from("devices")
       .select("id, device_name, browser, last_synced_at, api_key_hash")
       .is("linking_code", null) // only fully-linked devices
+      .not("api_key_hash", "is", null)
       .order("created_at", { ascending: false }),
   ]);
 

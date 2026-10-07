@@ -169,12 +169,12 @@ export function BookmarkDetailDialog({
               background: "var(--bk-bg)",
               border: "1px solid var(--bk-border)",
               color: bookmark.description ? "var(--bk-text-primary)" : "var(--bk-text-muted)",
-              fontStyle: bookmark.description_pending ? "italic" : "normal",
+              fontStyle: bookmark.description_pending && !bookmark.description ? "italic" : "normal",
             }}
           >
-            {bookmark.description_pending
-              ? "Generating AI description with NVIDIA Llama 3.1…"
-              : bookmark.description || "No description available for this bookmark."}
+            {bookmark.description || (bookmark.description_pending
+              ? "Generating AI description…"
+              : "No description available for this bookmark.")}
           </div>
         </div>
 

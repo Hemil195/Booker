@@ -40,24 +40,27 @@ export async function POST() {
     );
   }
 
-  // Mark all as pending first
-  const ids = bookmarks.map((b: any) => b.id);
-  if (ids.length > 0) {
-    await supabaseAdmin
+  // Only mark the active chunk pending so a route timeout cannot leave the whole library stuck.
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < bookmarks.length; i += BATCH_SIZE) {
+    const chunk = bookmarks.slice(i, i + BATCH_SIZE);
+    const { error: pendingError } = await supabaseAdmin
       .from("bookmarks")
       .update({ description_pending: true })
-      .in("id", ids);
+      .in("id", chunk.map((bookmark) => bookmark.id));
 
-    // Process in fast parallel chunks of 5 with Promise.all
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < bookmarks.length; i += BATCH_SIZE) {
-      const chunk = bookmarks.slice(i, i + BATCH_SIZE);
-      await Promise.all(
-        chunk.map((bm: any) =>
-          processBookmarkAiDescription(bm.id, bm.url, bm.title ?? undefined, bm.folder_path)
-        )
+    if (pendingError) {
+      return NextResponse.json(
+        { error: { code: "DB_ERROR", message: "Failed to mark bookmarks for regeneration" } },
+        { status: 500 },
       );
     }
+
+    await Promise.all(
+      chunk.map((bookmark) =>
+        processBookmarkAiDescription(bookmark.id, bookmark.url, bookmark.title ?? undefined, bookmark.folder_path)
+      ),
+    );
   }
 
   return NextResponse.json({

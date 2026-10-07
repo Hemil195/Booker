@@ -3,37 +3,12 @@
 // Optimized for fast, resilient serverless execution on live deployments.
 
 import { createSupabaseAdminClient } from "./supabaseClient";
+import { isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory";
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_MODEL = process.env.NVIDIA_MODEL ?? "nvidia/nemotron-3.5-lightning-30b-a3b";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
-
-const CATEGORIES = [
-  "AI & Tools", "Development", "Design", "Learning", "Productivity",
-  "Business", "Government", "Media", "Finance", "Travel", "Shopping", "News", "Health", "Other",
-] as const;
-
-const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  "AI & Tools": ["ai", "artificial intelligence", "llm", "machine learning", "generative ai", "chatbot", "neural"],
-  Development: ["code", "coding", "developer", "programming", "api", "github", "database", "javascript", "c-sharp", "c#", "dotnet", ".net"],
-  Design: ["design", "ui", "ux", "figma", "prototype", "css", "creative", "visual"],
-  Learning: ["learn", "course", "tutorial", "education", "lesson", "school", "university"],
-  Productivity: ["productivity", "notes", "task", "calendar", "workflow", "organize", "organization", "bookmark", "search"],
-  Business: ["business", "startup", "company", "marketing", "sales", "entrepreneur"],
-  Government: ["government", "gov", "public service", "citizen", "state portal", "official portal"],
-  Media: ["video", "movie", "music", "podcast", "stream", "photo"],
-  Finance: ["finance", "bank", "money", "investment", "stock", "payment", "crypto"],
-  Travel: ["travel", "flight", "hotel", "trip", "vacation", "tourism"],
-  Shopping: ["shop", "shopping", "store", "buy", "product", "deal"],
-  News: ["news", "journal", "politics", "headline", "press"],
-  Health: ["health", "medical", "doctor", "fitness", "medicine", "wellness"],
-};
-
-function isGenericBrowserFolder(folder?: string | null): boolean {
-  if (!folder) return true;
-  return /^(other bookmarks|bookmarks bar|mobile bookmarks|imported)(\/|$)/i.test(folder.trim());
-}
 
 function normalizeDescription(value: unknown, fallback: string): string {
   if (typeof value !== "string" || !value.trim()) return fallback;
@@ -68,25 +43,6 @@ function fallbackTags(title: string, url: string): string[] {
     .filter((word) => word.length >= 3)
     .filter((word) => !["www", "com", "org", "net", "gov", "in", "http", "https"].includes(word));
   return Array.from(new Set(words)).slice(0, 6);
-}
-
-function normalizeCategory(value: unknown, evidence: string): string {
-  const candidate = typeof value === "string" ? value.toLowerCase() : "";
-  const evidenceText = evidence.toLowerCase();
-  let best = "Other";
-  let bestScore = 0;
-  for (const category of CATEGORIES) {
-    const keywordScore = (CATEGORY_KEYWORDS[category] ?? []).reduce(
-      (total, keyword) => total + (evidenceText.includes(keyword) ? 1 : 0),
-      0,
-    );
-    const score = keywordScore + (candidate === category.toLowerCase() && keywordScore > 0 ? 2 : 0);
-    if (score > bestScore) {
-      best = category;
-      bestScore = score;
-    }
-  }
-  return best;
 }
 
 function parseModelJson(content: string): Record<string, unknown> | null {
@@ -150,7 +106,7 @@ async function callStructuredModel(
   prompt: string,
 ): Promise<Record<string, unknown> | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), provider === "groq" ? 25000 : 60000);
+  const timeout = setTimeout(() => controller.abort(), provider === "groq" ? 12000 : 15000);
 
   try {
     const response = await fetch(endpoint, {
@@ -281,7 +237,7 @@ export async function processBookmarkAiDescription(
     const fallbackDescription = contextDesc || (pageContent
       ? `This page, titled "${contextTitle}", contains information available at ${domain}. It may be useful to review the page for its specific content and purpose.`
       : `This bookmark points to "${contextTitle}" on ${domain}. The site blocked automatic reading, so open the link to view its current content.`);
-    let aiDescription = fallbackDescription;
+    let aiDescription: string | null = null;
     let modelTags: unknown[] = [];
     let modelCategory: unknown = null;
 
@@ -320,7 +276,7 @@ export async function processBookmarkAiDescription(
         prompt,
       );
 
-      if (!parsed) {
+      if (!parsed || typeof parsed.description !== "string" || !parsed.description.trim()) {
         const nextProvider = providerAttempts[providerAttempts.indexOf(attempt) + 1];
         if (nextProvider) {
           console.warn(`${attempt.provider.toUpperCase()} failed; falling back to ${nextProvider.provider.toUpperCase()}`);
@@ -328,7 +284,7 @@ export async function processBookmarkAiDescription(
         continue;
       }
 
-      if (parsed.description) aiDescription = normalizeDescription(parsed.description, fallbackDescription);
+      aiDescription = normalizeDescription(parsed.description, fallbackDescription);
       if (Array.isArray(parsed.tags) && parsed.tags.length > 0) {
         modelTags = parsed.tags;
       }
@@ -340,19 +296,29 @@ export async function processBookmarkAiDescription(
     const category = normalizeCategory(modelCategory, evidence);
     const tags = normalizeTags(modelTags, domain);
     const finalTags = tags.length > 0 ? tags : fallbackTags(contextTitle, url);
-    const folder = isGenericBrowserFolder(currentFolder) ? category : currentFolder;
+    const folder = isGenericBrowserFolder(currentFolder) ? category : currentFolder ?? null;
+
+    // Preserve the saved description unless a provider returned a new one.
+    const update: {
+      title: string;
+      tags: string[];
+      folder_path: string | null;
+      description_pending: boolean;
+      updated_at: string;
+      description?: string;
+    } = {
+      title: contextTitle,
+      tags: finalTags,
+      folder_path: folder,
+      description_pending: false,
+      updated_at: new Date().toISOString(),
+    };
+    if (aiDescription) update.description = aiDescription;
 
     // 3. Update bookmark row
     await supabase
       .from("bookmarks")
-      .update({
-        title: contextTitle,
-        description: aiDescription,
-        tags: finalTags,
-        folder_path: folder,
-        description_pending: false,
-        updated_at: new Date().toISOString(),
-      })
+      .update(update)
       .eq("id", bookmarkId);
   } catch (err) {
     console.error("AI Ingest error:", err);

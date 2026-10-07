@@ -1,7 +1,7 @@
 // apps/web/app/api/sync-to-browser/route.ts
 // GET /api/sync-to-browser
 // Headers: Authorization: Bearer <device_api_key>
-// Returns bookmarks created from dashboard/bot that need to be added to browser bookmarks.
+// Returns bookmarks to add and linked browser state to reconcile for this device.
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
@@ -27,7 +27,37 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: { code: "DB_ERROR", message: error.message } }, { status: 500 });
   }
 
-  return NextResponse.json({ bookmarks: bookmarks || [] });
+  const changes: {
+    id: string;
+    browser_bookmark_id: string;
+    url: string;
+    title: string | null;
+    folder_path: string | null;
+    deleted_at: string | null;
+  }[] = [];
+  const pageSize = 500;
+  let offset = 0;
+
+  while (true) {
+    const { data, error: changesError } = await supabase
+      .from("bookmarks")
+      .select("id, browser_bookmark_id, url, title, folder_path, deleted_at")
+      .eq("user_id", auth.userId)
+      .eq("device_id", auth.deviceId)
+      .not("browser_bookmark_id", "is", null)
+      .order("updated_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (changesError) {
+      return NextResponse.json({ error: { code: "DB_ERROR", message: changesError.message } }, { status: 500 });
+    }
+
+    changes.push(...(data ?? []));
+    if (!data || data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return NextResponse.json({ bookmarks: bookmarks || [], changes });
 }
 
 export async function POST(req: NextRequest) {

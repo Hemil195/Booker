@@ -40,11 +40,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Bookmark not found" }, { status: 404 });
   }
 
-  await supabaseAdmin
+  const { error: pendingError } = await supabaseAdmin
     .from("bookmarks")
     .update({ description_pending: true })
     .eq("id", bookmark.id)
     .eq("user_id", user.id);
+
+  if (pendingError) {
+    return NextResponse.json({ error: "Failed to start description regeneration" }, { status: 500 });
+  }
 
   await processBookmarkAiDescription(
     bookmark.id,

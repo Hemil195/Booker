@@ -35,6 +35,7 @@ interface BookmarkRowProps {
   onDelete: (id: string) => void;
   onSelect?: (bookmark: BookmarkWithDevice) => void;
   onRegenerate?: (bookmark: BookmarkWithDevice) => void;
+  isRegenerating?: boolean;
   index?: number;
 }
 
@@ -59,6 +60,7 @@ export function BookmarkRow({
   onDelete,
   onSelect,
   onRegenerate,
+  isRegenerating = false,
   index = 0,
 }: BookmarkRowProps) {
   const [hovered, setHovered] = useState(false);
@@ -147,7 +149,7 @@ export function BookmarkRow({
         </div>
 
         {/* Description */}
-        {bookmark.description_pending ? (
+        {bookmark.description_pending && !bookmark.description ? (
           <p className="text-xs mt-0.5" style={{ color: "var(--bk-text-muted)", fontStyle: "italic" }}>
             Generating description…
           </p>
@@ -231,9 +233,9 @@ export function BookmarkRow({
               <ExternalLinkIcon className="w-3.5 h-3.5 mr-2" />
               Open
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs text-[var(--bk-text-primary)] focus:bg-[var(--bk-selection)] focus:text-[var(--bk-accent)]" onClick={() => onRegenerate?.(bookmark)} disabled={bookmark.description_pending}>
+            <DropdownMenuItem className="text-xs text-[var(--bk-text-primary)] focus:bg-[var(--bk-selection)] focus:text-[var(--bk-accent)]" onClick={() => onRegenerate?.(bookmark)} disabled={isRegenerating}>
               <RefreshCwIcon className="w-3.5 h-3.5 mr-2" />
-              Regenerate Summary
+              {isRegenerating ? "Regenerating…" : "Regenerate Summary"}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="mt-1 border-t border-[var(--bk-border)] pt-1 text-xs text-red-400 focus:bg-red-500/10 focus:text-red-300"

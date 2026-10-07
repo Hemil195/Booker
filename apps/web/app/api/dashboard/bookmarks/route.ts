@@ -51,6 +51,18 @@ export async function GET(request: NextRequest) {
   const start = (page - 1) * pageSize;
   const end = start + pageSize - 1;
 
+  const stalePendingCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+  const { error: pendingCleanupError } = await supabase
+    .from("bookmarks")
+    .update({ description_pending: false })
+    .eq("user_id", user.id)
+    .eq("description_pending", true)
+    .lt("updated_at", stalePendingCutoff);
+
+  if (pendingCleanupError) {
+    console.warn("Failed to clear stale description status:", pendingCleanupError.message);
+  }
+
   let query = supabase
     .from("bookmarks")
     .select("*, devices(device_name, browser)", { count: "exact" })

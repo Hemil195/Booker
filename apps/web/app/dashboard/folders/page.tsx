@@ -12,7 +12,7 @@ export default async function FoldersPage() {
 
   const { data: bookmarks } = await supabase
     .from("bookmarks")
-    .select("id, folder_path, title, url, created_at")
+    .select("*")
     .eq("user_id", user!.id)
     .is("deleted_at", null);
 

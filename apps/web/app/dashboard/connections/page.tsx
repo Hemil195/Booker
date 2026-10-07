@@ -18,6 +18,7 @@ export default async function ConnectionsPage() {
     .select("id, device_name, browser, api_key_hash, created_at, last_synced_at")
     .eq("user_id", user!.id)
     .is("linking_code", null)
+    .not("api_key_hash", "is", null)
     .order("created_at", { ascending: false });
 
   return (
