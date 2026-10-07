@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory.ts";
+import { getKnownBookmarkMetadata } from "./knownBookmarkMetadata.ts";
 
 const cases = [
   ["AI & Tools", "AI chatbot for generative artificial intelligence"],
@@ -37,4 +38,40 @@ test("treats generated categories as reclassifiable but keeps custom folders", (
   assert.equal(isGenericBrowserFolder("Other"), true);
   assert.equal(isGenericBrowserFolder("AI & Tools"), true);
   assert.equal(isGenericBrowserFolder("Work/Design Tools"), false);
+});
+
+test("recognizes Google Drive as Productivity with a product-specific description", () => {
+  const metadata = getKnownBookmarkMetadata("https://drive.google.com/drive/my-drive");
+  assert.equal(metadata?.title, "Google Drive");
+  assert.equal(metadata?.category, "Productivity");
+  assert.equal(metadata?.folder, "Drive");
+  assert.match(metadata?.description ?? "", /cloud storage/i);
+});
+
+test("recognizes Gmail inbox URLs independently of account path", () => {
+  const metadata = getKnownBookmarkMetadata("https://mail.google.com/mail/u/0/#inbox");
+  assert.equal(metadata?.title, "Gmail");
+  assert.equal(metadata?.category, "Productivity");
+  assert.equal(metadata?.folder, "Mail");
+  assert.match(metadata?.description ?? "", /email service/i);
+});
+
+test("known Google descriptions do not require replacing the user's saved title", () => {
+  const savedTitle = "Hemil Patel";
+  const knownMetadata = getKnownBookmarkMetadata("https://drive.google.com/drive/my-drive");
+  assert.equal(savedTitle || knownMetadata?.title, "Hemil Patel");
+});
+
+test("other Google products do not force Drive or Mail folders", () => {
+  assert.equal(getKnownBookmarkMetadata("https://docs.google.com/document/d/example")?.folder, undefined);
+});
+
+test("recognizes Google Docs, Sheets, and Slides as distinct products", () => {
+  assert.equal(getKnownBookmarkMetadata("https://docs.google.com/document/d/example")?.title, "Google Docs");
+  assert.equal(getKnownBookmarkMetadata("https://sheets.google.com/spreadsheets/d/example")?.title, "Google Sheets");
+  assert.equal(getKnownBookmarkMetadata("https://slides.google.com/presentation/d/example")?.title, "Google Slides");
+});
+
+test("does not apply Google product metadata to unrelated hosts", () => {
+  assert.equal(getKnownBookmarkMetadata("https://example.com/google-drive"), null);
 });

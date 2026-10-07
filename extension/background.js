@@ -206,6 +206,15 @@ async function backfillAllBookmarks() {
 // Sync pending web-added bookmarks down into Chrome browser bookmarks
 // Called ON-DEMAND when web-add occurs (NO INTERVAL POLLING)
 // ---------------------------------------------------------------------------
+async function getBookmarksBarId() {
+  try {
+    const [bookmarksBar] = await chrome.bookmarks.get("1");
+    return bookmarksBar?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function findOrCreateBrowserFolder(folderPath) {
   const parts = folderPath.split("/").map((part) => part.trim()).filter(Boolean);
   if (parts.length === 0) return null;
@@ -232,8 +241,13 @@ async function findOrCreateBrowserFolder(folderPath) {
   findPath(tree);
   if (matchedFolderId) return matchedFolderId;
 
-  const [otherBookmarks] = await chrome.bookmarks.get("2");
-  let parentId = otherBookmarks?.id;
+  let parentId = await getBookmarksBarId();
+  if (!parentId) {
+    const [otherBookmarks] = await chrome.bookmarks.get("2");
+    parentId = otherBookmarks?.id;
+  }
+  if (!parentId) return null;
+
   for (const part of parts) {
     const children = await chrome.bookmarks.getChildren(parentId);
     let folder = children.find((child) => !child.url && child.title === part);
@@ -278,9 +292,13 @@ async function applyDashboardChanges(changes) {
         await chrome.bookmarks.update(bookmark.id, updatedFields);
       }
 
-      if (change.folder_path && await getFolderPath(bookmark.parentId) !== change.folder_path) {
+      const bookmarksBarId = await getBookmarksBarId();
+      const currentFolderPath = await getFolderPath(bookmark.parentId);
+      if (change.folder_path && currentFolderPath !== change.folder_path) {
         const parentId = await findOrCreateBrowserFolder(change.folder_path);
         if (parentId) await chrome.bookmarks.move(bookmark.id, { parentId });
+      } else if (!change.folder_path && bookmarksBarId && bookmark.parentId !== bookmarksBarId) {
+        await chrome.bookmarks.move(bookmark.id, { parentId: bookmarksBarId });
       }
     } catch (err) {
       console.warn("Bookar: Failed to apply dashboard bookmark change:", err);
@@ -309,9 +327,13 @@ async function syncWebToBrowser() {
 
     for (const bm of bookmarks ?? []) {
       try {
+        const parentId = bm.folder_path
+          ? await findOrCreateBrowserFolder(bm.folder_path)
+          : await getBookmarksBarId();
         const createdNode = await chrome.bookmarks.create({
           title: bm.title || bm.url,
           url: bm.url,
+          ...(parentId ? { parentId } : {}),
         });
 
         // Report browser_bookmark_id back to server so it is marked synced

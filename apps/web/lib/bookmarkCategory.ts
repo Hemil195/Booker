@@ -36,7 +36,8 @@ const CATEGORY_KEYWORDS: Record<(typeof CATEGORIES)[number], string[]> = {
   ],
   Productivity: [
     "productivity", "notes", "task", "calendar", "workflow", "organize", "organization",
-    "bookmark", "search", "project management", "to do list", "document editor",
+    "bookmark", "search", "project management", "to do list", "document editor", "cloud storage",
+    "email service", "inbox", "online document", "collaborate on files",
   ],
   Business: [
     "business", "startup", "company", "marketing", "sales", "entrepreneur", "crm",

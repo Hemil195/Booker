@@ -4,6 +4,7 @@
 
 import { createSupabaseAdminClient } from "./supabaseClient";
 import { isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory";
+import { getKnownBookmarkMetadata } from "./knownBookmarkMetadata";
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_MODEL = process.env.NVIDIA_MODEL ?? "nvidia/nemotron-3.5-lightning-30b-a3b";
@@ -226,20 +227,21 @@ export async function processBookmarkAiDescription(
 
   try {
     // 1. Fetch metadata and readable page text before asking NVIDIA to summarize it.
-    const meta = await fetchPageMeta(url);
+    const knownMetadata = getKnownBookmarkMetadata(url);
+    const meta = knownMetadata ? {} : await fetchPageMeta(url);
     const savedTitle = currentTitle && !/^https?:\/\//i.test(currentTitle) ? currentTitle.trim() : "";
-    const contextTitle = savedTitle || meta.title || getCleanTitleFromUrl(url);
-    const contextDesc = meta.description || "";
-    const pageContent = meta.content || "";
+    const contextTitle = savedTitle || knownMetadata?.title || meta.title || getCleanTitleFromUrl(url);
+    const contextDesc = knownMetadata?.description || meta.description || "";
+    const pageContent = knownMetadata?.description || meta.content || "";
     const domain = getDomain(url);
     const urlPath = new URL(url).pathname.replace(/[-_/]+/g, " ").replace(/\.[a-z0-9]+$/i, "").trim();
 
     const fallbackDescription = contextDesc || (pageContent
       ? `This page, titled "${contextTitle}", contains information available at ${domain}. It may be useful to review the page for its specific content and purpose.`
       : `This bookmark points to "${contextTitle}" on ${domain}. The site blocked automatic reading, so open the link to view its current content.`);
-    let aiDescription: string | null = null;
+    let aiDescription: string | null = knownMetadata?.description ?? null;
     let modelTags: unknown[] = [];
-    let modelCategory: unknown = null;
+    let modelCategory: unknown = knownMetadata?.category ?? null;
 
     // 2. Try Groq first, then NVIDIA as a backup if Groq fails or is unavailable.
     const prompt = `Article title: ${contextTitle}
@@ -267,7 +269,7 @@ export async function processBookmarkAiDescription(
       });
     }
 
-    for (const attempt of providerAttempts) {
+    for (const attempt of knownMetadata ? [] : providerAttempts) {
       const parsed = await callStructuredModel(
         attempt.provider,
         attempt.endpoint,
@@ -296,7 +298,8 @@ export async function processBookmarkAiDescription(
     const category = normalizeCategory(modelCategory, evidence);
     const tags = normalizeTags(modelTags, domain);
     const finalTags = tags.length > 0 ? tags : fallbackTags(contextTitle, url);
-    const folder = isGenericBrowserFolder(currentFolder) ? category : currentFolder ?? null;
+    const folder = knownMetadata?.folder
+      ?? (isGenericBrowserFolder(currentFolder) ? category : currentFolder ?? null);
 
     // Preserve the saved description unless a provider returned a new one.
     const update: {
