@@ -5,7 +5,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
-import { processBookmarkAiDescription } from "@/lib/aiIngest";
 
 export async function POST(req: NextRequest) {
   // Auth
@@ -129,7 +128,7 @@ export async function POST(req: NextRequest) {
         folder_path: folder_path ?? null,
         browser_bookmark_id: browser_bookmark_id ?? null,
         source: "browser",
-        description_pending: true,
+        description_pending: false,
       })
       .select("id")
       .single();
@@ -141,8 +140,6 @@ export async function POST(req: NextRequest) {
       );
     }
     bookmarkId = inserted.id;
-    // Process AI description inline so Vercel serverless runtime does not freeze execution
-    await processBookmarkAiDescription(bookmarkId, url, title, folder_path);
   }
 
   // Update device last_synced_at

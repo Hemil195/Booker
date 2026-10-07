@@ -564,7 +564,7 @@ async function executeTool(
           folder_path: folder,
           tags: tags.length ? tags : null,
           source: "mcp",
-          description_pending: !notes,
+          description_pending: false,
         })
         .select("id, title, url")
         .single(),

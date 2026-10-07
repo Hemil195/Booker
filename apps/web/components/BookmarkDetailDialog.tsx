@@ -78,8 +78,9 @@ export function BookmarkDetailDialog({
             <div
               className="w-12 h-12 rounded-[12px] flex items-center justify-center overflow-hidden flex-shrink-0"
               style={{
-                background: "var(--bk-bg)",
-                border: "1px solid var(--bk-border)",
+                background: "#ffffff",
+                border: "1px solid rgba(148, 163, 184, 0.25)",
+                boxShadow: "inset 0 0 0 1px rgba(15, 23, 42, 0.04)",
               }}
             >
               <FaviconImage url={bookmark.url} title={bookmark.title} size={128} imgSize={28} rounded="8px" />
@@ -132,10 +133,12 @@ export function BookmarkDetailDialog({
             href={bookmark.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs font-mono break-all hover:underline flex-1 min-w-0"
+            className="text-xs font-mono break-all flex-1 min-w-0"
             style={{
               color: "var(--bk-text-primary)",
               fontFamily: "var(--font-geist-mono, monospace)",
+              textDecoration: "none",
+              cursor: "pointer",
             }}
           >
             {bookmark.url}

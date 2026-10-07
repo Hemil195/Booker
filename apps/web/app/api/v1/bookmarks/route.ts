@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       title: title ?? url,
       description: notes ?? null,
       source: "bot",
-      description_pending: !notes, // if no notes provided, queue for LLM
+      description_pending: false,
     })
     .select("id")
     .single();

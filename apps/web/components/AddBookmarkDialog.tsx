@@ -83,7 +83,7 @@ export function AddBookmarkDialog({
       url: url.trim(),
       title: title.trim() || url.trim(),
       source: "dashboard",
-      description_pending: true,
+      description_pending: false,
     }).select("id").single();
 
     setLoading(false);

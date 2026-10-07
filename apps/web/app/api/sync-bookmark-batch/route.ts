@@ -10,7 +10,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
-import { processBookmarkAiDescription } from "@/lib/aiIngest";
 
 interface BookmarkInput {
   event?: string;
@@ -57,7 +56,7 @@ export async function POST(req: NextRequest) {
     folder_path: bm.folder_path || null,
     browser_bookmark_id: bm.browser_bookmark_id || null,
     source: "browser" as const,
-    description_pending: true,
+    description_pending: false,
     updated_at: new Date().toISOString(),
     deleted_at: null,
   }));
@@ -134,17 +133,6 @@ export async function POST(req: NextRequest) {
     .from("devices")
     .update({ last_synced_at: new Date().toISOString() })
     .eq("id", auth.deviceId);
-
-  // Process AI descriptions in parallel chunks
-  const BATCH_AI_SIZE = 5;
-  for (let i = 0; i < savedBookmarkRecords.length; i += BATCH_AI_SIZE) {
-    const chunk = savedBookmarkRecords.slice(i, i + BATCH_AI_SIZE);
-    await Promise.all(
-      chunk.map((bm) =>
-        processBookmarkAiDescription(bm.id, bm.url, bm.title || undefined, bm.folder_path)
-      )
-    );
-  }
 
   const durationMs = Date.now() - startTime;
 

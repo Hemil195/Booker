@@ -1,11 +1,13 @@
 // apps/web/lib/aiIngest.ts
-// Background helper to fetch page metadata and invoke NVIDIA LLM for descriptions.
+// Background helper to fetch page metadata and invoke Groq first, with NVIDIA as a fallback.
 // Optimized for fast, resilient serverless execution on live deployments.
 
 import { createSupabaseAdminClient } from "./supabaseClient";
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_MODEL = process.env.NVIDIA_MODEL ?? "nvidia/nemotron-3.5-lightning-30b-a3b";
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = process.env.GROQ_MODEL ?? "openai/gpt-oss-20b";
 
 const CATEGORIES = [
   "AI & Tools", "Development", "Design", "Learning", "Productivity",
@@ -140,6 +142,59 @@ function cleanText(value: string): string {
     .trim();
 }
 
+async function callStructuredModel(
+  provider: "groq" | "nvidia",
+  endpoint: string,
+  apiKey: string,
+  model: string,
+  prompt: string,
+): Promise<Record<string, unknown> | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), provider === "groq" ? 25000 : 60000);
+
+  try {
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: "Return only the requested JSON object. Do not include a preamble, analysis, Markdown, or code fences.",
+          },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`${provider.toUpperCase()} request failed (${response.status}): ${text.slice(0, 300)}`);
+    }
+
+    const payload = await response.json();
+    const content = payload.choices?.[0]?.message?.content ?? "";
+    const parsed = parseModelJson(content);
+    return parsed;
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      console.warn(`${provider.toUpperCase()} summary request timed out; retrying fallback provider if configured`, provider === "groq" ? "groq" : "nvidia");
+    } else {
+      console.warn(`${provider.toUpperCase()} LLM call failed`, err);
+    }
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function fetchPageMeta(url: string): Promise<{
   title?: string;
   description?: string;
@@ -230,65 +285,55 @@ export async function processBookmarkAiDescription(
     let modelTags: unknown[] = [];
     let modelCategory: unknown = null;
 
-    // 2. Call NVIDIA NIM LLM if API key is provided
+    // 2. Try Groq first, then NVIDIA as a backup if Groq fails or is unavailable.
+    const prompt = `Article title: ${contextTitle}
+    Article URL path: ${urlPath || "(none)"}
+    Article text: ${pageContent || "(none)"}
+
+    Return exactly one compact JSON object and nothing else. Do not write analysis or reasoning. The description must be exactly two short plain-English sentences about this specific article, not the website brand. Use 3-5 specific lowercase tags and one category from: AI & Tools, Development, Design, Learning, Productivity, Business, Government, Media, Finance, Travel, Shopping, News, Health, Other.
+    JSON keys: description, tags, folder.`;
+
+    const providerAttempts: Array<{ provider: "groq" | "nvidia"; endpoint: string; apiKey: string; model: string }> = [];
+    if (GROQ_API_KEY) {
+      providerAttempts.push({
+        provider: "groq",
+        endpoint: "https://api.groq.com/openai/v1/chat/completions",
+        apiKey: GROQ_API_KEY,
+        model: GROQ_MODEL,
+      });
+    }
     if (NVIDIA_API_KEY) {
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 60000);
+      providerAttempts.push({
+        provider: "nvidia",
+        endpoint: "https://integrate.api.nvidia.com/v1/chat/completions",
+        apiKey: NVIDIA_API_KEY,
+        model: NVIDIA_MODEL,
+      });
+    }
 
-        const prompt = `Article title: ${contextTitle}
-        Article URL path: ${urlPath || "(none)"}
-        Article text: ${pageContent || "(none)"}
+    for (const attempt of providerAttempts) {
+      const parsed = await callStructuredModel(
+        attempt.provider,
+        attempt.endpoint,
+        attempt.apiKey,
+        attempt.model,
+        prompt,
+      );
 
-        Return exactly one compact JSON object and nothing else. Do not write analysis or reasoning. The description must be exactly two short plain-English sentences about this specific article, not the website brand. Use 3-5 specific lowercase tags and one category from: AI & Tools, Development, Design, Learning, Productivity, Business, Government, Media, Finance, Travel, Shopping, News, Health, Other.
-        JSON keys: description, tags, folder.`;
-
-        try {
-          const llmRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-            signal: controller.signal,
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${NVIDIA_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: NVIDIA_MODEL,
-              messages: [
-                {
-                  role: "system",
-                  content: "Return only the requested JSON object. Do not include a preamble, analysis, Markdown, or code fences.",
-                },
-                { role: "user", content: prompt },
-              ],
-              temperature: 0,
-              response_format: { type: "json_object" },
-            }),
-          });
-
-          if (llmRes.ok) {
-            const llmData = await llmRes.json();
-            const content = llmData.choices?.[0]?.message?.content ?? "";
-            const parsed = parseModelJson(content);
-            if (parsed) {
-              if (parsed.description) aiDescription = normalizeDescription(parsed.description, fallbackDescription);
-              if (Array.isArray(parsed.tags) && parsed.tags.length > 0) {
-                modelTags = parsed.tags;
-              }
-              modelCategory = parsed.folder;
-            }
-          } else {
-            console.warn("NVIDIA summary request failed", llmRes.status, await llmRes.text());
-          }
-        } finally {
-          clearTimeout(timeout);
+      if (!parsed) {
+        const nextProvider = providerAttempts[providerAttempts.indexOf(attempt) + 1];
+        if (nextProvider) {
+          console.warn(`${attempt.provider.toUpperCase()} failed; falling back to ${nextProvider.provider.toUpperCase()}`);
         }
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          console.warn("NVIDIA summary request timed out; using fallback description", url);
-        } else {
-          console.warn("NVIDIA LLM call failed for", url, err);
-        }
+        continue;
       }
+
+      if (parsed.description) aiDescription = normalizeDescription(parsed.description, fallbackDescription);
+      if (Array.isArray(parsed.tags) && parsed.tags.length > 0) {
+        modelTags = parsed.tags;
+      }
+      modelCategory = parsed.folder;
+      break;
     }
 
     const evidence = `${contextTitle} ${urlPath} ${contextDesc} ${pageContent} ${url}`;

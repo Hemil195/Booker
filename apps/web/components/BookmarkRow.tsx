@@ -112,7 +112,11 @@ export function BookmarkRow({
       {/* Favicon */}
       <div
         className="flex-shrink-0 w-9 h-9 rounded-[8px] flex items-center justify-center overflow-hidden"
-        style={{ background: "var(--bk-surface)", border: "1px solid var(--bk-border)" }}
+        style={{
+          background: "#ffffff",
+          border: "1px solid rgba(148, 163, 184, 0.25)",
+          boxShadow: "inset 0 0 0 1px rgba(15, 23, 42, 0.04)",
+        }}
       >
         <FaviconImage url={bookmark.url} title={bookmark.title} size={64} imgSize={22} rounded="6px" />
       </div>
@@ -152,7 +156,11 @@ export function BookmarkRow({
             <span style={{ color: "var(--bk-text-primary)" }}>Description:</span>{" "}
             {bookmark.description}
           </div>
-        ) : null}
+        ) : (
+          <p className="text-xs mt-0.5" style={{ color: "var(--bk-text-muted)", fontStyle: "italic" }}>
+            descritopn not found
+          </p>
+        )}
 
         {/* Tags line */}
         <div className="mt-1 text-[11px] truncate" style={{ color: "var(--bk-text-muted)" }}>
