@@ -46,7 +46,7 @@ export async function POST() {
     const chunk = bookmarks.slice(i, i + BATCH_SIZE);
     const { error: pendingError } = await supabaseAdmin
       .from("bookmarks")
-      .update({ description_pending: true })
+      .update({ description_pending: true, updated_at: new Date().toISOString() })
       .in("id", chunk.map((bookmark) => bookmark.id));
 
     if (pendingError) {

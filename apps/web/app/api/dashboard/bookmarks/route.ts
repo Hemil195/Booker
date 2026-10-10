@@ -6,9 +6,14 @@ type FilterTab = "all" | "recent" | "bot";
 
 function groupBookmarks(data: any[]) {
   const groupMap = new Map<string, any>();
+  const stalePendingCutoff = Date.now() - 2 * 60 * 1000;
 
   data.forEach((bookmark) => {
     const normalizedUrl = (bookmark.url || "").trim().toLowerCase().replace(/\/$/, "");
+    const pendingUpdatedAt = Date.parse(bookmark.updated_at);
+    const descriptionPending = bookmark.description_pending
+      && Number.isFinite(pendingUpdatedAt)
+      && pendingUpdatedAt >= stalePendingCutoff;
     const deviceName =
       bookmark.devices?.browser && bookmark.devices.browser !== "Unknown"
         ? bookmark.devices.browser
@@ -19,6 +24,7 @@ function groupBookmarks(data: any[]) {
     if (!groupMap.has(normalizedUrl)) {
       groupMap.set(normalizedUrl, {
         ...bookmark,
+        description_pending: descriptionPending,
         device_name: deviceName,
         browser: bookmark.devices?.browser,
       });
@@ -50,18 +56,6 @@ export async function GET(request: NextRequest) {
   const tab = (params.get("tab") || "all") as FilterTab;
   const start = (page - 1) * pageSize;
   const end = start + pageSize - 1;
-
-  const stalePendingCutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString();
-  const { error: pendingCleanupError } = await supabase
-    .from("bookmarks")
-    .update({ description_pending: false })
-    .eq("user_id", user.id)
-    .eq("description_pending", true)
-    .lt("updated_at", stalePendingCutoff);
-
-  if (pendingCleanupError) {
-    console.warn("Failed to clear stale description status:", pendingCleanupError.message);
-  }
 
   let query = supabase
     .from("bookmarks")

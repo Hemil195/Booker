@@ -127,56 +127,65 @@ function isDefaultFolderPath(folder: string | null): boolean {
   return !folder?.trim() || /^(other bookmarks|bookmarks bar|mobile bookmarks|imported)$/i.test(folder.trim());
 }
 
+export function createBookmarkFolderMatcher(examples: BookmarkFolderExample[]) {
+  const preparedExamples = examples.flatMap((example) => {
+    const folder = example.folder_path?.trim();
+    if (!folder || isDefaultFolderPath(folder)) return [];
+
+    const tokens = bookmarkTokens([
+      example.title,
+      example.url,
+      example.description,
+      ...(example.tags ?? []),
+    ]);
+    return tokens.size > 0 ? [{ folder, tokens, host: bookmarkHost(example.url) }] : [];
+  });
+
+  return (title: string, url: string, currentFolder: string | null): string | null => {
+    if (!isDefaultFolderPath(currentFolder)) return currentFolder;
+
+    const incomingTokens = bookmarkTokens([title, url]);
+    if (incomingTokens.size === 0) return currentFolder;
+
+    const folderScores = new Map<string, number[]>();
+    const incomingHost = bookmarkHost(url);
+
+    for (const example of preparedExamples) {
+      const { folder, tokens: exampleTokens } = example;
+      let sharedTokens = 0;
+      for (const token of incomingTokens) {
+        if (exampleTokens.has(token)) sharedTokens++;
+      }
+
+      const overlapScore = sharedTokens / Math.sqrt(incomingTokens.size * exampleTokens.size);
+      const hostScore = incomingHost && incomingHost === example.host ? 0.35 : 0;
+      if (overlapScore + hostScore < 0.28) continue;
+
+      const scores = folderScores.get(folder) ?? [];
+      scores.push(overlapScore + hostScore);
+      folderScores.set(folder, scores);
+    }
+
+    const rankedFolders = Array.from(folderScores, ([folder, scores]) => ({
+      folder,
+      score: Math.max(...scores) + Math.min(scores.length - 1, 3) * 0.04,
+    })).sort((first, second) => second.score - first.score);
+
+    if (!rankedFolders.length || (rankedFolders[1] && rankedFolders[0].score - rankedFolders[1].score < 0.08)) {
+      return currentFolder;
+    }
+
+    return rankedFolders[0].folder;
+  };
+}
+
 export function inferBookmarkFolder(
   title: string,
   url: string,
   currentFolder: string | null,
   examples: BookmarkFolderExample[],
 ): string | null {
-  if (!isDefaultFolderPath(currentFolder)) return currentFolder;
-
-  const incomingTokens = bookmarkTokens([title, url]);
-  if (incomingTokens.size === 0) return currentFolder;
-
-  const folderScores = new Map<string, number[]>();
-  const incomingHost = bookmarkHost(url);
-
-  for (const example of examples) {
-    const folder = example.folder_path?.trim();
-    if (!folder || isDefaultFolderPath(folder)) continue;
-
-    const exampleTokens = bookmarkTokens([
-      example.title,
-      example.url,
-      example.description,
-      ...(example.tags ?? []),
-    ]);
-    if (exampleTokens.size === 0) continue;
-
-    let sharedTokens = 0;
-    for (const token of incomingTokens) {
-      if (exampleTokens.has(token)) sharedTokens++;
-    }
-
-    const overlapScore = sharedTokens / Math.sqrt(incomingTokens.size * exampleTokens.size);
-    const hostScore = incomingHost && incomingHost === bookmarkHost(example.url) ? 0.35 : 0;
-    if (overlapScore + hostScore < 0.28) continue;
-
-    const scores = folderScores.get(folder) ?? [];
-    scores.push(overlapScore + hostScore);
-    folderScores.set(folder, scores);
-  }
-
-  const rankedFolders = Array.from(folderScores, ([folder, scores]) => ({
-    folder,
-    score: Math.max(...scores) + Math.min(scores.length - 1, 3) * 0.04,
-  })).sort((first, second) => second.score - first.score);
-
-  if (!rankedFolders.length || (rankedFolders[1] && rankedFolders[0].score - rankedFolders[1].score < 0.08)) {
-    return currentFolder;
-  }
-
-  return rankedFolders[0].folder;
+  return createBookmarkFolderMatcher(examples)(title, url, currentFolder);
 }
 
 export function normalizeCategory(value: unknown, evidence: string): string {

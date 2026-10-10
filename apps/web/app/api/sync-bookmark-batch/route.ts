@@ -10,7 +10,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
-import { inferBookmarkFolder, type BookmarkFolderExample } from "@/lib/bookmarkCategory";
+import {
+  createBookmarkFolderMatcher,
+  isGenericBrowserFolder,
+  type BookmarkFolderExample,
+} from "@/lib/bookmarkCategory";
 
 interface BookmarkInput {
   event?: string;
@@ -46,23 +50,28 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createSupabaseAdminClient();
-  const { data: examples } = await supabase
-    .from("bookmarks")
-    .select("folder_path, title, url, description, tags")
-    .eq("user_id", auth.userId)
-    .not("folder_path", "is", null)
-    .is("deleted_at", null)
-    .limit(1000);
-  const folderExamples = (examples ?? []) as BookmarkFolderExample[];
+  const validBookmarks = bookmarks.filter((bookmark) => bookmark.url && (bookmark.url.startsWith("http://") || bookmark.url.startsWith("https://")));
+  const needsFolderInference = validBookmarks.some((bookmark) => isGenericBrowserFolder(bookmark.folder_path ?? null));
+  let folderExamples: BookmarkFolderExample[] = [];
+  if (needsFolderInference) {
+    const { data: examples } = await supabase
+      .from("bookmarks")
+      .select("folder_path, title, url, description, tags")
+      .eq("user_id", auth.userId)
+      .not("folder_path", "is", null)
+      .is("deleted_at", null)
+      .limit(1000);
+    folderExamples = (examples ?? []) as BookmarkFolderExample[];
+  }
+  const inferFolder = createBookmarkFolderMatcher(folderExamples);
 
   // Build all rows for instant bulk upsert
-  const validBookmarks = bookmarks.filter((bm) => bm.url && (bm.url.startsWith("http://") || bm.url.startsWith("https://")));
   const rawRows = validBookmarks.map((bm) => ({
     user_id: auth.userId,
     device_id: auth.deviceId,
     url: bm.url,
     title: bm.title || bm.url,
-    folder_path: inferBookmarkFolder(bm.title || bm.url, bm.url, bm.folder_path || null, folderExamples),
+    folder_path: inferFolder(bm.title || bm.url, bm.url, bm.folder_path || null),
     browser_bookmark_id: bm.browser_bookmark_id || null,
     source: "browser" as const,
     description_pending: false,

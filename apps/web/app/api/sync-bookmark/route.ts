@@ -5,7 +5,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
-import { inferBookmarkFolder, type BookmarkFolderExample } from "@/lib/bookmarkCategory";
+import {
+  createBookmarkFolderMatcher,
+  isGenericBrowserFolder,
+  type BookmarkFolderExample,
+} from "@/lib/bookmarkCategory";
 
 export async function POST(req: NextRequest) {
   // Auth
@@ -120,13 +124,18 @@ export async function POST(req: NextRequest) {
       }
     }
   } else {
-    const { data: examples } = await supabase
-      .from("bookmarks")
-      .select("folder_path, title, url, description, tags")
-      .eq("user_id", auth.userId)
-      .not("folder_path", "is", null)
-      .is("deleted_at", null)
-      .limit(1000);
+    let examples: BookmarkFolderExample[] = [];
+    if (isGenericBrowserFolder(folder_path ?? null)) {
+      const { data } = await supabase
+        .from("bookmarks")
+        .select("folder_path, title, url, description, tags")
+        .eq("user_id", auth.userId)
+        .not("folder_path", "is", null)
+        .is("deleted_at", null)
+        .limit(1000);
+      examples = (data ?? []) as BookmarkFolderExample[];
+    }
+    const inferFolder = createBookmarkFolderMatcher(examples);
 
     // Insert new
     const { data: inserted, error } = await supabase
@@ -136,11 +145,10 @@ export async function POST(req: NextRequest) {
         device_id: auth.deviceId,
         url,
         title: title ?? url,
-        folder_path: inferBookmarkFolder(
+        folder_path: inferFolder(
           title ?? url,
           url,
           folder_path ?? null,
-          (examples ?? []) as BookmarkFolderExample[],
         ),
         browser_bookmark_id: browser_bookmark_id ?? null,
         source: "browser",

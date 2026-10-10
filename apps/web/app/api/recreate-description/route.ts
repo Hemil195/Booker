@@ -42,7 +42,7 @@ export async function POST(req: Request) {
 
   const { error: pendingError } = await supabaseAdmin
     .from("bookmarks")
-    .update({ description_pending: true })
+    .update({ description_pending: true, updated_at: new Date().toISOString() })
     .eq("id", bookmark.id)
     .eq("user_id", user.id);
 

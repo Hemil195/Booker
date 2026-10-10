@@ -60,6 +60,7 @@ export function DashboardClient({
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shareCopied, setShareCopied] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -75,6 +76,11 @@ export function DashboardClient({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const supabase = createSupabaseBrowserClient();
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedSearchQuery(searchQuery), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const fetchBookmarks = useCallback(async (page: number, size: number, queryText: string, tab: FilterTab) => {
     setLoading(true);
@@ -100,11 +106,11 @@ export function DashboardClient({
     }
 
     const load = async () => {
-      await fetchBookmarks(currentPage, pageSize, searchQuery, activeTab);
+      await fetchBookmarks(currentPage, pageSize, debouncedSearchQuery, activeTab);
     };
 
     void load();
-  }, [hasLinkedDevice, fetchBookmarks, currentPage, pageSize, searchQuery, activeTab]);
+  }, [hasLinkedDevice, fetchBookmarks, currentPage, pageSize, debouncedSearchQuery, activeTab]);
 
   // Realtime subscription for live updates from DB
   useEffect(() => {
@@ -119,12 +125,12 @@ export function DashboardClient({
             ? payload.new.id
             : null;
           if (bookmarkId && regeneratingIdsRef.current.has(bookmarkId)) return;
-          void fetchBookmarks(currentPage, pageSize, searchQuery, activeTab);
+          void fetchBookmarks(currentPage, pageSize, debouncedSearchQuery, activeTab);
         },
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [supabase, userId, hasLinkedDevice, fetchBookmarks, currentPage, pageSize, searchQuery, activeTab]);
+  }, [supabase, userId, hasLinkedDevice, fetchBookmarks, currentPage, pageSize, debouncedSearchQuery, activeTab]);
 
   const handleDelete = async (id: string) => {
     await supabase
@@ -659,7 +665,7 @@ export function DashboardClient({
         userId={userId}
         deviceId={devices[0]?.id ?? ""}
         devices={devices}
-        onAdded={() => fetchBookmarks(currentPage, pageSize, searchQuery, activeTab)}
+        onAdded={() => fetchBookmarks(currentPage, pageSize, debouncedSearchQuery, activeTab)}
       />
 
       {/* Bookmark Detail Modal */}

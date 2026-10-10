@@ -38,6 +38,7 @@ type BookmarkRowItem = Bookmark;
 interface FoldersClientProps {
   userId: string;
   initialBookmarks: BookmarkRowItem[];
+  initialFolder?: string | null;
 }
 
 export function FoldersClient(props: FoldersClientProps) {
@@ -93,12 +94,20 @@ function FolderToastViewport() {
   );
 }
 
-function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
-  const [bookmarks, setBookmarks] = useState<BookmarkRowItem[]>(initialBookmarks);
+function FoldersClientContent({ initialBookmarks, initialFolder = null }: FoldersClientProps) {
+  const [bookmarks, setBookmarks] = useState<BookmarkRowItem[]>(() => {
+    const stalePendingCutoff = Date.now() - 2 * 60 * 1000;
+    return initialBookmarks.map((bookmark) => ({
+      ...bookmark,
+      description_pending: bookmark.description_pending
+        && Number.isFinite(Date.parse(bookmark.updated_at))
+        && Date.parse(bookmark.updated_at) >= stalePendingCutoff,
+    }));
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [folderNameInput, setFolderNameInput] = useState("");
   const [customFolders, setCustomFolders] = useState<string[]>([]);
-  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+  const [activeFolder, setActiveFolder] = useState<string | null>(initialFolder);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shareCopied, setShareCopied] = useState(false);
   const [detailBookmark, setDetailBookmark] = useState<BookmarkWithDevice | null>(null);
@@ -147,6 +156,35 @@ function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
   const existingFolders = useMemo(() => {
     return Array.from(folderMap.keys()).sort();
   }, [folderMap]);
+
+  useEffect(() => {
+    setActiveFolder(initialFolder);
+    setSelectedIds(new Set());
+  }, [initialFolder]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const foldersPrefix = "/dashboard/folders/";
+      const pathname = window.location.pathname;
+      const folder = pathname.startsWith(foldersPrefix)
+        ? pathname.slice(foldersPrefix.length).split("/").map(decodeURIComponent).join("/")
+        : null;
+      setActiveFolder(folder);
+      setSelectedIds(new Set());
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  const navigateToFolder = (folder: string | null) => {
+    setActiveFolder(folder);
+    setSelectedIds(new Set());
+    const path = folder
+      ? `/dashboard/folders/${folder.split("/").map(encodeURIComponent).join("/")}`
+      : "/dashboard/folders";
+    if (window.location.pathname !== path) window.history.pushState(null, "", path);
+  };
 
   const handleCreateFolder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -395,7 +433,7 @@ function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
           {/* Breadcrumb Navigation Bar */}
           <nav className="flex items-center gap-2 text-xs mb-1" style={{ color: "var(--bk-text-muted)" }}>
             <button
-              onClick={() => { setActiveFolder(null); setSelectedIds(new Set()); }}
+              onClick={() => navigateToFolder(null)}
               className="flex items-center gap-1 hover:underline transition-bk"
               style={{ color: activeFolder ? "var(--bk-text-muted)" : "var(--bk-text-primary)" }}
             >
@@ -433,7 +471,7 @@ function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
         <div className="flex items-center gap-2">
           {activeFolder ? (
             <button
-              onClick={() => { setActiveFolder(null); setSelectedIds(new Set()); }}
+              onClick={() => navigateToFolder(null)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-medium transition-bk"
               style={{ background: "var(--bk-surface)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}
             >
@@ -459,7 +497,7 @@ function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
           {folderEntries.map(([folderName, items]) => (
             <div
               key={folderName}
-              onClick={() => { setActiveFolder(folderName); setSelectedIds(new Set()); }}
+              onClick={() => navigateToFolder(folderName)}
               onContextMenu={(event) => openContextMenu(event, { folder: folderName })}
               onDragOver={(event) => { event.preventDefault(); setDropFolder(folderName); }}
               onDragLeave={() => setDropFolder((current) => current === folderName ? null : current)}
@@ -823,7 +861,7 @@ function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
             </>
           ) : contextMenu.folder ? (
             <>
-              <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { setActiveFolder(contextMenu.folder!); setContextMenu(null); }}>
+              <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { navigateToFolder(contextMenu.folder!); setContextMenu(null); }}>
                 <FolderIcon className="h-3.5 w-3.5" /> Open folder
               </button>
             </>
