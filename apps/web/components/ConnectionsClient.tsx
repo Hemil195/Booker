@@ -22,6 +22,7 @@ import {
   FileTextIcon,
   ClockIcon,
   CalendarIcon,
+  AlertTriangleIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -168,6 +169,7 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
   const [restExpanded, setRestExpanded] = useState(false);
   const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
+  const [keyErrorNotice, setKeyErrorNotice] = useState<string | null>(null);
   const [mcpUrl, setMcpUrl] = useState<string>("https://bookar-rereal.vercel.app/api/mcp");
 
   useEffect(() => {
@@ -188,7 +190,7 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
 
       setGeneratingKey(false);
       if (!res.ok || json.error || !json.device) {
-        alert(`Failed to generate key: ${json.error || "Unknown error"}`);
+        setKeyErrorNotice(`Failed to generate key: ${json.error || "Unknown error"}`);
         return;
       }
 
@@ -196,7 +198,7 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
       setDevicesList((prev) => [json.device, ...prev]);
     } catch {
       setGeneratingKey(false);
-      alert("Error generating API key. Please check your network connection.");
+      setKeyErrorNotice("Error generating API key. Please check your network connection.");
     }
   }, []);
 
@@ -607,6 +609,30 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
               style={{ background: "rgba(239,68,68,0.15)", color: "#fc8181", border: "1px solid rgba(239,68,68,0.3)", opacity: revokingDevice ? 0.6 : 1 }}
             >
               {revokingDevice ? "Revoking…" : "Revoke"}
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!keyErrorNotice} onOpenChange={(open) => !open && setKeyErrorNotice(null)}>
+        <DialogContent style={{ maxWidth: "380px", padding: "20px" }}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" style={{ color: "var(--bk-text-primary)" }}>
+              <AlertTriangleIcon className="h-4 w-4 text-red-400" />
+              Could not generate key
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs leading-relaxed" style={{ color: "var(--bk-text-muted)" }}>
+            {keyErrorNotice}
+          </p>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setKeyErrorNotice(null)}
+              className="rounded-[8px] px-3 py-2 text-xs font-semibold"
+              style={{ background: "var(--bk-accent)", color: "var(--bk-bg)" }}
+            >
+              Close
             </button>
           </div>
         </DialogContent>

@@ -3,13 +3,14 @@
 // Headers: Authorization: Bearer <device_api_key>
 //
 // Fast, non-blocking backfill endpoint.
-// Immediately bulk-inserts/upserts bookmarks into database with description_pending = true,
+// Immediately imports bookmarks without overwriting existing user-managed records,
 // updates device last_synced_at, and returns an instant response in <200ms.
 // Asynchronously triggers Edge Function description generation in background without blocking HTTP response.
 
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
+import { inferBookmarkFolder, type BookmarkFolderExample } from "@/lib/bookmarkCategory";
 
 interface BookmarkInput {
   event?: string;
@@ -45,6 +46,14 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createSupabaseAdminClient();
+  const { data: examples } = await supabase
+    .from("bookmarks")
+    .select("folder_path, title, url, description, tags")
+    .eq("user_id", auth.userId)
+    .not("folder_path", "is", null)
+    .is("deleted_at", null)
+    .limit(1000);
+  const folderExamples = (examples ?? []) as BookmarkFolderExample[];
 
   // Build all rows for instant bulk upsert
   const validBookmarks = bookmarks.filter((bm) => bm.url && (bm.url.startsWith("http://") || bm.url.startsWith("https://")));
@@ -53,7 +62,7 @@ export async function POST(req: NextRequest) {
     device_id: auth.deviceId,
     url: bm.url,
     title: bm.title || bm.url,
-    folder_path: bm.folder_path || null,
+    folder_path: inferBookmarkFolder(bm.title || bm.url, bm.url, bm.folder_path || null, folderExamples),
     browser_bookmark_id: bm.browser_bookmark_id || null,
     source: "browser" as const,
     description_pending: false,
@@ -72,24 +81,21 @@ export async function POST(req: NextRequest) {
   const BATCH_SIZE = 100;
   let insertedCount = 0;
 
-  const savedBookmarkRecords: { id: string; url: string; title?: string; folder_path?: string | null }[] = [];
-
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE);
     const { data, error } = await supabase
       .from("bookmarks")
       .upsert(chunk, {
         onConflict: "user_id,url",
-        ignoreDuplicates: false,
+        ignoreDuplicates: true,
       })
       .select("id, url, title");
 
     if (!error && data) {
       insertedCount += data.length;
-      data.forEach((item: any) => savedBookmarkRecords.push(item));
     } else if (error) {
       console.warn("Batch upsert notice, running resilient fallback:", error.message);
-      // Resilient fallback if unique constraint is absent
+      // Insert only when no record exists, even if the unique constraint is absent.
       for (const row of chunk) {
         const { data: existing } = await supabase
           .from("bookmarks")
@@ -99,20 +105,7 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
 
         if (existing) {
-          const { error: updateErr } = await supabase
-            .from("bookmarks")
-            .update({
-              title: row.title,
-              folder_path: row.folder_path,
-              browser_bookmark_id: row.browser_bookmark_id,
-              updated_at: new Date().toISOString(),
-              deleted_at: null,
-            })
-            .eq("id", existing.id);
-          if (!updateErr) {
-            insertedCount++;
-            savedBookmarkRecords.push({ id: existing.id, url: row.url, title: row.title });
-          }
+          continue;
         } else {
           const { data: inserted, error: insertErr } = await supabase
             .from("bookmarks")
@@ -121,7 +114,6 @@ export async function POST(req: NextRequest) {
             .single();
           if (!insertErr && inserted) {
             insertedCount++;
-            savedBookmarkRecords.push({ id: inserted.id, url: row.url, title: row.title, folder_path: row.folder_path });
           }
         }
       }
@@ -140,7 +132,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     status: "queued",
     total: bookmarks.length,
-    processed: insertedCount || validBookmarks.length,
+    processed: insertedCount,
     duration_ms: durationMs,
   });
 }

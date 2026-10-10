@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory.ts";
+import { inferBookmarkFolder, isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory.ts";
 import { getKnownBookmarkMetadata } from "./knownBookmarkMetadata.ts";
 
 const cases = [
@@ -38,6 +38,39 @@ test("treats generated categories as reclassifiable but keeps custom folders", (
   assert.equal(isGenericBrowserFolder("Other"), true);
   assert.equal(isGenericBrowserFolder("AI & Tools"), true);
   assert.equal(isGenericBrowserFolder("Work/Design Tools"), false);
+});
+
+test("infers a folder from matching saved bookmark examples", () => {
+  const examples = [
+    {
+      folder_path: "Engineering",
+      title: "TypeScript language guide",
+      url: "https://docs.example.dev/typescript",
+      tags: ["programming", "developer"],
+    },
+  ];
+  assert.equal(
+    inferBookmarkFolder("TypeScript developer handbook", "https://another.dev/handbook", null, examples),
+    "Engineering",
+  );
+});
+
+test("preserves explicit browser folders during matching", () => {
+  assert.equal(
+    inferBookmarkFolder("TypeScript developer handbook", "https://another.dev/handbook", "Reading List", []),
+    "Reading List",
+  );
+});
+
+test("leaves ambiguous bookmark matches uncategorized", () => {
+  const examples = [
+    { folder_path: "Engineering", title: "TypeScript guide", url: "https://one.dev/guide" },
+    { folder_path: "Learning", title: "TypeScript guide", url: "https://two.dev/guide" },
+  ];
+  assert.equal(
+    inferBookmarkFolder("TypeScript guide", "https://new.dev/guide", null, examples),
+    null,
+  );
 });
 
 test("recognizes Google Drive as Productivity with a product-specific description", () => {

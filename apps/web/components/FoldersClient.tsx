@@ -15,26 +15,21 @@ import {
   SquareIcon,
   Share2Icon,
   Trash2Icon,
-  ChevronUpIcon,
-  CopyIcon,
-  ScissorsIcon,
-  ClipboardPasteIcon,
   ExternalLinkIcon,
+  MoveRightIcon,
+  CheckIcon,
+  XIcon,
 } from "lucide-react";
+import { Toast } from "@base-ui/react/toast";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { BookmarkRow, BookmarkWithDevice } from "@/components/BookmarkRow";
 import { BookmarkDetailDialog } from "@/components/BookmarkDetailDialog";
+import { FolderChangeDialog } from "@/components/FolderChangeDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient";
 import type { Bookmark } from "@/lib/database.types";
 
@@ -45,7 +40,60 @@ interface FoldersClientProps {
   initialBookmarks: BookmarkRowItem[];
 }
 
-export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
+export function FoldersClient(props: FoldersClientProps) {
+  return (
+    <Toast.Provider timeout={4000}>
+      <FoldersClientContent {...props} />
+      <FolderToastViewport />
+    </Toast.Provider>
+  );
+}
+
+function FolderToastViewport() {
+  const { toasts } = Toast.useToastManager();
+
+  return (
+    <Toast.Portal>
+      <Toast.Viewport className="fixed right-4 top-4 z-[110] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2 outline-none">
+        {toasts.map((toast) => {
+          const isError = toast.type === "error";
+          return (
+            <Toast.Root
+              key={toast.id}
+              toast={toast}
+              className="flex items-center gap-3 rounded-[8px] border px-4 py-3 text-sm shadow-xl transition-all duration-200 data-[starting-style]:translate-x-3 data-[starting-style]:opacity-0 data-[ending-style]:translate-x-3 data-[ending-style]:opacity-0"
+              style={{
+                background: "var(--bk-surface)",
+                borderColor: isError ? "rgba(248,113,113,0.45)" : "var(--bk-border)",
+                color: "var(--bk-text-primary)",
+              }}
+            >
+              <span
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                style={{
+                  background: isError ? "rgba(248,113,113,0.14)" : "var(--bk-selection)",
+                  color: isError ? "#f87171" : "var(--bk-accent)",
+                }}
+              >
+                {isError ? <XIcon className="h-3.5 w-3.5" /> : <CheckIcon className="h-3.5 w-3.5" />}
+              </span>
+              <Toast.Content className="min-w-0 flex-1">
+                <Toast.Title className="break-words text-xs font-medium leading-relaxed">
+                  {toast.title}
+                </Toast.Title>
+              </Toast.Content>
+              <Toast.Close aria-label="Dismiss notification" className="shrink-0 text-[var(--bk-text-muted)] hover:text-[var(--bk-text-primary)]">
+                <XIcon className="h-4 w-4" />
+              </Toast.Close>
+            </Toast.Root>
+          );
+        })}
+      </Toast.Viewport>
+    </Toast.Portal>
+  );
+}
+
+function FoldersClientContent({ initialBookmarks }: FoldersClientProps) {
   const [bookmarks, setBookmarks] = useState<BookmarkRowItem[]>(initialBookmarks);
   const [createOpen, setCreateOpen] = useState(false);
   const [folderNameInput, setFolderNameInput] = useState("");
@@ -54,8 +102,11 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [shareCopied, setShareCopied] = useState(false);
   const [detailBookmark, setDetailBookmark] = useState<BookmarkWithDevice | null>(null);
+  const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [moveSelectionIds, setMoveSelectionIds] = useState<string[]>([]);
+  const [moveTarget, setMoveTarget] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
-  const [clipboard, setClipboard] = useState<{ ids: string[]; mode: "copy" | "cut" } | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -63,9 +114,17 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
     folder?: string;
   } | null>(null);
   const [dropFolder, setDropFolder] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
+  const [folderChangePrompt, setFolderChangePrompt] = useState<{
+    bookmarkId: string;
+    currentFolder: string | null;
+    proposedFolder: string;
+  } | null>(null);
   const supabase = createSupabaseBrowserClient();
+  const toastManager = Toast.useToastManager();
+  const showActionToast = (message: string, type: "success" | "error" = "success") => {
+    toastManager.add({ title: message, type, timeout: 4000 });
+  };
 
   // Group bookmarks by folder
   const folderMap = useMemo(() => {
@@ -134,58 +193,45 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
       .in("id", ids);
 
     if (error) {
-      setActionMessage("Could not move the selected bookmarks.");
+      showActionToast("Could not move the selected bookmarks.", "error");
       return false;
     }
 
     setBookmarks((prev) => prev.map((bookmark) =>
       ids.includes(bookmark.id) ? { ...bookmark, folder_path: folderPath } : bookmark,
     ));
-    setActionMessage(`${ids.length} bookmark${ids.length === 1 ? "" : "s"} moved to ${targetFolder}.`);
+    showActionToast(`${ids.length} bookmark${ids.length === 1 ? "" : "s"} moved to ${targetFolder}.`);
     return true;
   };
 
-  const beginClipboardAction = (ids: string[], mode: "copy" | "cut") => {
+  const openMoveDialog = (ids: string[]) => {
     if (ids.length === 0) return;
-    setClipboard({ ids, mode });
-    setSelectedIds(new Set(ids));
-    setActionMessage(`${ids.length} bookmark${ids.length === 1 ? "" : "s"} ${mode === "copy" ? "copied" : "cut"}.`);
+    setMoveSelectionIds(ids);
+    setMoveTarget("");
+    setNewFolderName("");
+    setMoveError(null);
+    setMoveDialogOpen(true);
   };
 
-  const pasteBookmarks = async (targetFolder: string) => {
-    if (!clipboard?.ids.length) return;
-    const targetPath = targetFolder === "Uncategorized" ? null : targetFolder;
-
-    if (clipboard.mode === "cut") {
-      const moved = await persistMove(clipboard.ids, targetFolder);
-      if (moved) setClipboard(null);
+  const handleMoveSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const targetFolder = moveTarget === "__new_folder__" ? newFolderName.trim() : moveTarget;
+    if (!targetFolder) {
+      setMoveError("Choose a folder or enter a new folder name.");
       return;
     }
 
-    const sourceBookmarks = bookmarks.filter((bookmark) => clipboard.ids.includes(bookmark.id));
-    const copies = sourceBookmarks.map((bookmark) => ({
-      user_id: bookmark.user_id,
-      device_id: bookmark.device_id,
-      url: bookmark.url,
-      title: bookmark.title,
-      description: bookmark.description,
-      tags: bookmark.tags,
-      folder_path: targetPath,
-      browser_bookmark_id: null,
-      source: bookmark.source,
-      description_pending: false,
-    }));
-
-    const { data, error } = await supabase.from("bookmarks").insert(copies).select("*");
-    if (error || !data) {
-      setActionMessage("Could not paste the copied bookmarks.");
+    setMoveError(null);
+    const moved = await persistMove(moveSelectionIds, targetFolder);
+    if (!moved) {
+      setMoveError("Could not move the selected bookmarks. Please try again.");
       return;
     }
-
-    setBookmarks((prev) => [...data, ...prev]);
-    setActionMessage(`${data.length} bookmark${data.length === 1 ? "" : "s"} pasted to ${targetFolder}.`);
-    setClipboard(null);
+    if (moveTarget === "__new_folder__") {
+      setCustomFolders((prev) => Array.from(new Set([...prev, targetFolder])));
+    }
     setSelectedIds(new Set());
+    setMoveDialogOpen(false);
   };
 
   const idsForBookmarkAction = (bookmarkId: string) =>
@@ -209,30 +255,12 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
-
-      const shortcut = event.ctrlKey || event.metaKey;
-      if (!shortcut) {
-        if (event.key === "Escape") setContextMenu(null);
-        return;
-      }
-
-      if (event.key.toLowerCase() === "c" && selectedIds.size > 0) {
-        event.preventDefault();
-        beginClipboardAction(Array.from(selectedIds), "copy");
-      } else if (event.key.toLowerCase() === "x" && selectedIds.size > 0) {
-        event.preventDefault();
-        beginClipboardAction(Array.from(selectedIds), "cut");
-      } else if (event.key.toLowerCase() === "v" && clipboard) {
-        event.preventDefault();
-        void pasteBookmarks(activeFolder || "Uncategorized");
-      }
+      if (event.key === "Escape") setContextMenu(null);
     };
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedIds, clipboard, activeFolder, bookmarks, existingFolders]);
+  }, []);
 
   const handleDelete = async (id: string) => {
     await supabase
@@ -255,6 +283,7 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
         body: JSON.stringify({ bookmark_id: bookmark.id }),
       });
       if (!response.ok) throw new Error("Failed to regenerate bookmark summary");
+      const result: { proposed_folder?: string | null } = await response.json();
 
       const { data, error } = await supabase
         .from("bookmarks")
@@ -263,14 +292,22 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
         .single();
       if (error || !data) throw new Error("Summary generated, but the updated bookmark could not be loaded");
 
+      if (result.proposed_folder && result.proposed_folder !== bookmark.folder_path) {
+        setFolderChangePrompt({
+          bookmarkId: bookmark.id,
+          currentFolder: bookmark.folder_path,
+          proposedFolder: result.proposed_folder,
+        });
+      }
+
       setBookmarks((prev) => prev.map((item) => item.id === bookmark.id ? data : item));
       setDetailBookmark((current) => current?.id === bookmark.id ? data : current);
-      setActionMessage("Bookmark summary regenerated.");
+      showActionToast("Bookmark summary regenerated.");
     } catch (error) {
       setBookmarks((prev) => prev.map((item) =>
         item.id === bookmark.id ? { ...item, description_pending: false } : item,
       ));
-      setActionMessage(error instanceof Error ? error.message : "Failed to regenerate bookmark summary.");
+      showActionToast(error instanceof Error ? error.message : "Failed to regenerate bookmark summary.", "error");
     } finally {
       setRegeneratingIds((prev) => {
         const next = new Set(prev);
@@ -279,6 +316,28 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
       });
     }
   };
+
+  const handleConfirmFolderChange = async () => {
+    if (!folderChangePrompt) return;
+    const { error } = await supabase
+      .from("bookmarks")
+      .update({ folder_path: folderChangePrompt.proposedFolder, updated_at: new Date().toISOString() })
+      .eq("id", folderChangePrompt.bookmarkId);
+    if (error) throw error;
+
+    setBookmarks((prev) => prev.map((item) => item.id === folderChangePrompt.bookmarkId
+      ? { ...item, folder_path: folderChangePrompt.proposedFolder }
+      : item,
+    ));
+    setDetailBookmark((current) => current?.id === folderChangePrompt.bookmarkId
+      ? { ...current, folder_path: folderChangePrompt.proposedFolder }
+      : current,
+    );
+    showActionToast("Bookmark moved to the suggested folder.");
+    setFolderChangePrompt(null);
+  };
+
+  const handleCancelFolderChange = () => setFolderChangePrompt(null);
 
   const handleBulkDelete = async () => {
     const ids = Array.from(selectedIds);
@@ -290,14 +349,6 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
     setSelectedIds(new Set());
   };
 
-  const handleBulkMove = async (targetFolder: string) => {
-    if (!targetFolder.trim()) return;
-    const ids = Array.from(selectedIds);
-    await persistMove(ids, targetFolder.trim());
-    setSelectedIds(new Set());
-    setNewFolderName("");
-  };
-
   const handleDropOnFolder = async (event: React.DragEvent, folder: string) => {
     event.preventDefault();
     event.stopPropagation();
@@ -307,7 +358,7 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
       await persistMove(ids, folder);
       setSelectedIds(new Set());
     } catch {
-      setActionMessage("Could not move the dragged bookmarks.");
+      showActionToast("Could not move the dragged bookmarks.", "error");
     }
   };
 
@@ -401,13 +452,6 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
           )}
         </div>
       </div>
-
-      {actionMessage && (
-        <div className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2 text-xs" role="status" style={{ background: "var(--bk-surface)", border: "1px solid var(--bk-border)", color: "var(--bk-text-muted)" }}>
-          <span>{actionMessage}</span>
-          <button onClick={() => setActionMessage(null)} aria-label="Dismiss message" className="text-xs">Dismiss</button>
-        </div>
-      )}
 
       {/* VIEW 1: Grid of Folder Cards (when no folder is open) */}
       {!activeFolder && (
@@ -555,31 +599,6 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
           </span>
 
           <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => beginClipboardAction(Array.from(selectedIds), "copy")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-xs font-medium transition-bk"
-              style={{ background: "rgba(255,255,255,0.08)", color: "var(--bk-text-primary)", border: "1px solid var(--bk-border)" }}
-              title="Copy selected (Ctrl+C)"
-            >
-              <CopyIcon className="w-3.5 h-3.5" /> Copy
-            </button>
-            <button
-              onClick={() => beginClipboardAction(Array.from(selectedIds), "cut")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-xs font-medium transition-bk"
-              style={{ background: "rgba(255,255,255,0.08)", color: "var(--bk-text-primary)", border: "1px solid var(--bk-border)" }}
-              title="Cut selected (Ctrl+X)"
-            >
-              <ScissorsIcon className="w-3.5 h-3.5" /> Cut
-            </button>
-            <button
-              onClick={() => void pasteBookmarks(activeFolder || "Uncategorized")}
-              disabled={!clipboard}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-xs font-medium transition-bk disabled:opacity-40"
-              style={{ background: "rgba(255,255,255,0.08)", color: "var(--bk-text-primary)", border: "1px solid var(--bk-border)" }}
-              title="Paste here (Ctrl+V)"
-            >
-              <ClipboardPasteIcon className="w-3.5 h-3.5" /> Paste
-            </button>
             {/* Share Selected */}
             <button
               onClick={handleShare}
@@ -594,67 +613,13 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
               {shareCopied ? "Copied!" : "Share"}
             </button>
 
-            {/* Move to Folder Dropdown */}
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-xs font-medium transition-bk outline-none cursor-pointer"
-                style={{
-                  background: "rgba(255,255,255,0.08)",
-                  color: "var(--bk-text-primary)",
-                  border: "1px solid var(--bk-border)",
-                }}
-              >
-                <FolderIcon className="w-3.5 h-3.5" />
-                Move to folder
-                <ChevronUpIcon className="w-3 h-3 ml-0.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={8} className="w-64 p-2">
-                <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--bk-text-muted)" }}>
-                  Select existing folder
-                </div>
-                {existingFolders.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs" style={{ color: "var(--bk-text-muted)" }}>
-                    No existing folders yet
-                  </div>
-                ) : (
-                  existingFolders.map((folder) => (
-                    <DropdownMenuItem key={folder} onClick={() => handleBulkMove(folder)}>
-                      <FolderIcon className="w-3.5 h-3.5 mr-2" style={{ color: "var(--bk-accent)" }} />
-                      <span className="truncate">{folder}</span>
-                    </DropdownMenuItem>
-                  ))
-                )}
-                <div className="border-t my-1 pt-1.5" style={{ borderColor: "var(--bk-border)" }}>
-                  <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--bk-text-muted)" }}>
-                    Create new folder
-                  </div>
-                  <div className="flex gap-1 px-1">
-                    <input
-                      type="text"
-                      placeholder="Folder name..."
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      className="flex-1 px-2 py-1 text-xs rounded-[6px] outline-none"
-                      style={{
-                        background: "var(--bk-bg)",
-                        border: "1px solid var(--bk-border)",
-                        color: "var(--bk-text-primary)",
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleBulkMove(newFolderName);
-                      }}
-                    />
-                    <button
-                      onClick={() => handleBulkMove(newFolderName)}
-                      className="px-2 py-1 text-xs rounded-[6px] font-medium"
-                      style={{ background: "var(--bk-accent)", color: "#09090b" }}
-                    >
-                      <FolderPlusIcon className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+              onClick={() => openMoveDialog(Array.from(selectedIds))}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-xs font-medium transition-bk"
+              style={{ background: "rgba(255,255,255,0.08)", color: "var(--bk-text-primary)", border: "1px solid var(--bk-border)" }}
+            >
+              <MoveRightIcon className="w-3.5 h-3.5" /> Move
+            </button>
 
             {/* Bulk Delete */}
             <button
@@ -692,6 +657,90 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
         onOpenChange={(open) => !open && setDetailBookmark(null)}
         onDelete={handleDelete}
       />
+
+      <FolderChangeDialog
+        open={!!folderChangePrompt}
+        currentFolder={folderChangePrompt?.currentFolder ?? null}
+        proposedFolder={folderChangePrompt?.proposedFolder ?? ""}
+        onCancel={handleCancelFolderChange}
+        onConfirm={handleConfirmFolderChange}
+      />
+
+      <Dialog open={moveDialogOpen} onOpenChange={setMoveDialogOpen}>
+        <DialogContent
+          style={{
+            maxWidth: "420px",
+            padding: "20px",
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--bk-text-primary)" }}>
+              <MoveRightIcon className="h-4 w-4" style={{ color: "var(--bk-accent)" }} />
+              Move {moveSelectionIds.length === 1 ? "bookmark" : `${moveSelectionIds.length} bookmarks`}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleMoveSubmit} className="space-y-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--bk-text-muted)" }}>
+                Destination folder
+              </label>
+              <select
+                value={moveTarget}
+                onChange={(event) => { setMoveTarget(event.target.value); setMoveError(null); }}
+                className="w-full rounded-[8px] px-3 py-2.5 text-xs outline-none"
+                style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}
+              >
+                <option value="">Choose a folder</option>
+                <option value="Uncategorized">Uncategorized</option>
+                {existingFolders.filter((folder) => folder !== "Uncategorized").map((folder) => (
+                  <option key={folder} value={folder}>{folder}</option>
+                ))}
+                <option value="__new_folder__">Create new folder…</option>
+              </select>
+            </div>
+
+            {moveTarget === "__new_folder__" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium" style={{ color: "var(--bk-text-muted)" }}>
+                  New folder name
+                </label>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newFolderName}
+                  onChange={(event) => { setNewFolderName(event.target.value); setMoveError(null); }}
+                  placeholder="e.g. Work/Design"
+                  className="w-full rounded-[8px] px-3 py-2.5 text-xs outline-none"
+                  style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}
+                />
+              </div>
+            )}
+
+            {moveError && <p className="text-xs" role="alert" style={{ color: "#fc8181" }}>{moveError}</p>}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setMoveDialogOpen(false)}
+                className="rounded-[8px] border px-3 py-2 text-xs"
+                style={{ borderColor: "var(--bk-border)", color: "var(--bk-text-muted)" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!moveTarget || (moveTarget === "__new_folder__" && !newFolderName.trim())}
+                className="flex items-center gap-1.5 rounded-[8px] px-3 py-2 text-xs font-semibold disabled:opacity-50"
+                style={{ background: "var(--bk-accent)", color: "#09090b" }}
+              >
+                {moveTarget === "__new_folder__" ? <FolderPlusIcon className="h-3.5 w-3.5" /> : <MoveRightIcon className="h-3.5 w-3.5" />}
+                Move
+              </button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Folder Modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -764,22 +813,10 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
               <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { const item = bookmarks.find((bookmark) => bookmark.id === contextMenu.bookmarkId); if (item) setDetailBookmark(item); setContextMenu(null); }}>
                 <ExternalLinkIcon className="h-3.5 w-3.5" /> Open details
               </button>
-              <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { beginClipboardAction(idsForBookmarkAction(contextMenu.bookmarkId!), "copy"); setContextMenu(null); }}>
-                <CopyIcon className="h-3.5 w-3.5" /> Copy <span className="ml-auto text-[10px] opacity-60">Ctrl+C</span>
-              </button>
-              <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { beginClipboardAction(idsForBookmarkAction(contextMenu.bookmarkId!), "cut"); setContextMenu(null); }}>
-                <ScissorsIcon className="h-3.5 w-3.5" /> Cut <span className="ml-auto text-[10px] opacity-60">Ctrl+X</span>
+              <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { openMoveDialog(idsForBookmarkAction(contextMenu.bookmarkId!)); setContextMenu(null); }}>
+                <MoveRightIcon className="h-3.5 w-3.5" /> Move to folder…
               </button>
               <div className="my-1 border-t" style={{ borderColor: "var(--bk-border)" }} />
-              <p className="px-2 py-1 text-[10px] font-semibold uppercase" style={{ color: "var(--bk-text-muted)" }}>Move to</p>
-              {existingFolders.filter((folder) => folder !== activeFolder).map((folder) => (
-                <button key={folder} role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { void persistMove(idsForBookmarkAction(contextMenu.bookmarkId!), folder); setContextMenu(null); }}>
-                  <FolderIcon className="h-3.5 w-3.5" /> <span className="truncate">{folder}</span>
-                </button>
-              ))}
-              <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { void persistMove(idsForBookmarkAction(contextMenu.bookmarkId!), "Uncategorized"); setContextMenu(null); }}>
-                <FolderIcon className="h-3.5 w-3.5" /> Uncategorized
-              </button>
               <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs" style={{ color: "#fc8181" }} onClick={() => { void handleDelete(contextMenu.bookmarkId!); setContextMenu(null); }}>
                 <Trash2Icon className="h-3.5 w-3.5" /> Delete
               </button>
@@ -789,11 +826,6 @@ export function FoldersClient({ initialBookmarks }: FoldersClientProps) {
               <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { setActiveFolder(contextMenu.folder!); setContextMenu(null); }}>
                 <FolderIcon className="h-3.5 w-3.5" /> Open folder
               </button>
-              {clipboard && (
-                <button role="menuitem" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-white/10" style={{ color: "var(--bk-text-primary)" }} onClick={() => { void pasteBookmarks(contextMenu.folder!); setContextMenu(null); }}>
-                  <ClipboardPasteIcon className="h-3.5 w-3.5" /> Paste into folder
-                </button>
-              )}
             </>
           ) : null}
         </div>

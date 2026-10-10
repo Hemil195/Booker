@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   BookmarkIcon,
   ClockIcon,
@@ -29,6 +29,7 @@ import { SkeletonRows } from "@/components/SkeletonRows";
 import { LinkingCodeCard, NoBookmarksState } from "@/components/EmptyState";
 import { AddBookmarkDialog } from "@/components/AddBookmarkDialog";
 import { BookmarkDetailDialog } from "@/components/BookmarkDetailDialog";
+import { FolderChangeDialog } from "@/components/FolderChangeDialog";
 
 type FilterTab = "all" | "recent" | "bot";
 
@@ -64,6 +65,12 @@ export function DashboardClient({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [detailBookmark, setDetailBookmark] = useState<BookmarkWithDevice | null>(null);
   const [regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
+  const regeneratingIdsRef = useRef(new Set<string>());
+  const [folderChangePrompt, setFolderChangePrompt] = useState<{
+    bookmarkId: string;
+    currentFolder: string | null;
+    proposedFolder: string;
+  } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -107,7 +114,13 @@ export function DashboardClient({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookmarks", filter: `user_id=eq.${userId}` },
-        () => fetchBookmarks(currentPage, pageSize, searchQuery, activeTab),
+        (payload) => {
+          const bookmarkId = "id" in payload.new && typeof payload.new.id === "string"
+            ? payload.new.id
+            : null;
+          if (bookmarkId && regeneratingIdsRef.current.has(bookmarkId)) return;
+          void fetchBookmarks(currentPage, pageSize, searchQuery, activeTab);
+        },
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -123,6 +136,8 @@ export function DashboardClient({
   };
 
   const handleRegenerate = async (bookmark: BookmarkWithDevice) => {
+    let awaitingFolderChoice = false;
+    regeneratingIdsRef.current.add(bookmark.id);
     setRegeneratingIds((prev) => new Set(prev).add(bookmark.id));
     setBookmarks((prev) => prev.map((item) =>
       item.id === bookmark.id ? { ...item, description_pending: true } : item,
@@ -135,19 +150,71 @@ export function DashboardClient({
         body: JSON.stringify({ bookmark_id: bookmark.id }),
       });
       if (!response.ok) throw new Error("Failed to regenerate bookmark summary");
-      await fetchBookmarks(currentPage, pageSize, searchQuery, activeTab);
+      const result: { proposed_folder?: string | null } = await response.json();
+
+      const { data, error } = await supabase
+        .from("bookmarks")
+        .select("description, description_pending")
+        .eq("id", bookmark.id)
+        .single();
+      if (error || !data) throw new Error("Summary generated, but the updated bookmark could not be loaded");
+
+      let folderPath = bookmark.folder_path;
+      if (result.proposed_folder && result.proposed_folder !== bookmark.folder_path) {
+        awaitingFolderChoice = true;
+        setFolderChangePrompt({
+          bookmarkId: bookmark.id,
+          currentFolder: bookmark.folder_path,
+          proposedFolder: result.proposed_folder,
+        });
+      }
+
+      setBookmarks((prev) => prev.map((item) => item.id === bookmark.id
+        ? { ...item, description: data.description, description_pending: data.description_pending, folder_path: folderPath }
+        : item,
+      ));
+      setDetailBookmark((current) => current?.id === bookmark.id
+        ? { ...current, description: data.description, description_pending: data.description_pending, folder_path: folderPath }
+        : current,
+      );
     } catch (error) {
       console.error("Failed to regenerate bookmark summary", error);
       setBookmarks((prev) => prev.map((item) =>
         item.id === bookmark.id ? { ...item, description_pending: false } : item,
       ));
     } finally {
+      if (!awaitingFolderChoice) regeneratingIdsRef.current.delete(bookmark.id);
       setRegeneratingIds((prev) => {
         const next = new Set(prev);
         next.delete(bookmark.id);
         return next;
       });
     }
+  };
+
+  const handleConfirmFolderChange = async () => {
+    if (!folderChangePrompt) return;
+    const { error } = await supabase
+      .from("bookmarks")
+      .update({ folder_path: folderChangePrompt.proposedFolder, updated_at: new Date().toISOString() })
+      .eq("id", folderChangePrompt.bookmarkId);
+    if (error) throw error;
+
+    setBookmarks((prev) => prev.map((item) => item.id === folderChangePrompt.bookmarkId
+      ? { ...item, folder_path: folderChangePrompt.proposedFolder }
+      : item,
+    ));
+    setDetailBookmark((current) => current?.id === folderChangePrompt.bookmarkId
+      ? { ...current, folder_path: folderChangePrompt.proposedFolder }
+      : current,
+    );
+    regeneratingIdsRef.current.delete(folderChangePrompt.bookmarkId);
+    setFolderChangePrompt(null);
+  };
+
+  const handleCancelFolderChange = () => {
+    if (folderChangePrompt) regeneratingIdsRef.current.delete(folderChangePrompt.bookmarkId);
+    setFolderChangePrompt(null);
   };
 
   const handleBulkDelete = async () => {
@@ -601,6 +668,14 @@ export function DashboardClient({
         open={!!detailBookmark}
         onOpenChange={(open) => !open && setDetailBookmark(null)}
         onDelete={handleDelete}
+      />
+
+      <FolderChangeDialog
+        open={!!folderChangePrompt}
+        currentFolder={folderChangePrompt?.currentFolder ?? null}
+        proposedFolder={folderChangePrompt?.proposedFolder ?? ""}
+        onCancel={handleCancelFolderChange}
+        onConfirm={handleConfirmFolderChange}
       />
     </div>
   );

@@ -222,7 +222,8 @@ export async function processBookmarkAiDescription(
   url: string,
   currentTitle?: string,
   currentFolder?: string | null,
-) {
+  options: { preserveFolder?: boolean } = {},
+): Promise<string | null> {
   const supabase = createSupabaseAdminClient();
 
   try {
@@ -305,17 +306,17 @@ export async function processBookmarkAiDescription(
     const update: {
       title: string;
       tags: string[];
-      folder_path: string | null;
+      folder_path?: string | null;
       description_pending: boolean;
       updated_at: string;
       description?: string;
     } = {
       title: contextTitle,
       tags: finalTags,
-      folder_path: folder,
       description_pending: false,
       updated_at: new Date().toISOString(),
     };
+    if (!options.preserveFolder) update.folder_path = folder;
     if (aiDescription) update.description = aiDescription;
 
     // 3. Update bookmark row
@@ -323,11 +324,13 @@ export async function processBookmarkAiDescription(
       .from("bookmarks")
       .update(update)
       .eq("id", bookmarkId);
+    return folder;
   } catch (err) {
     console.error("AI Ingest error:", err);
     await supabase
       .from("bookmarks")
       .update({ description_pending: false })
       .eq("id", bookmarkId);
+    return currentFolder ?? null;
   }
 }

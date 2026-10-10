@@ -50,12 +50,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Failed to start description regeneration" }, { status: 500 });
   }
 
-  await processBookmarkAiDescription(
+  const proposedFolder = await processBookmarkAiDescription(
     bookmark.id,
     bookmark.url,
     bookmark.title ?? undefined,
     bookmark.folder_path,
+    { preserveFolder: true },
   );
 
-  return NextResponse.json({ status: "ok", bookmark_id: bookmark.id });
+  return NextResponse.json({ status: "ok", bookmark_id: bookmark.id, proposed_folder: proposedFolder });
 }

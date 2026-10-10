@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { inferBookmarkFolder, type BookmarkFolderExample } from "@/lib/bookmarkCategory";
 
 interface DeviceOption {
   id: string;
@@ -40,12 +41,17 @@ export function AddBookmarkDialog({
   const [title, setTitle] = useState("");
   const [targetDevice, setTargetDevice] = useState<string>("all");
   const [availableDevices, setAvailableDevices] = useState<DeviceOption[]>(initialDevices);
+  const [availableFolders, setAvailableFolders] = useState<string[]>([]);
+  const [folderExamples, setFolderExamples] = useState<BookmarkFolderExample[]>([]);
+  const [folderPath, setFolderPath] = useState("auto");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const supabase = createSupabaseBrowserClient();
 
   useEffect(() => {
-    if (open && availableDevices.length === 0) {
+    if (!open) return;
+
+    if (availableDevices.length === 0) {
       supabase
         .from("devices")
         .select("id, device_name, browser")
@@ -58,6 +64,23 @@ export function AddBookmarkDialog({
           }
         });
     }
+
+    supabase
+      .from("bookmarks")
+      .select("folder_path, title, url, description, tags")
+      .eq("user_id", userId)
+      .not("folder_path", "is", null)
+      .is("deleted_at", null)
+      .then(({ data }) => {
+        if (!data) return;
+        const examples = data as BookmarkFolderExample[];
+        setFolderExamples(examples);
+        const folders = Array.from(new Set(examples
+          .map((bookmark) => bookmark.folder_path?.trim())
+          .filter((folder): folder is string => Boolean(folder))))
+          .sort((first, second) => first.localeCompare(second));
+        setAvailableFolders(folders);
+      });
   }, [open, userId, availableDevices.length, supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,12 +99,18 @@ export function AddBookmarkDialog({
 
     setLoading(true);
     setError(null);
+    const resolvedFolder = folderPath === "__uncategorized__"
+      ? null
+      : folderPath === "auto"
+        ? inferBookmarkFolder(title.trim() || url.trim(), url.trim(), null, folderExamples)
+        : folderPath;
 
     const { data: inserted, error: insertError } = await supabase.from("bookmarks").insert({
       user_id: userId,
       device_id: targetDevId,
       url: url.trim(),
       title: title.trim() || url.trim(),
+      folder_path: resolvedFolder,
       source: "dashboard",
       description_pending: false,
     }).select("id").single();
@@ -100,6 +129,7 @@ export function AddBookmarkDialog({
 
     setUrl("");
     setTitle("");
+    setFolderPath("auto");
     onOpenChange(false);
     onAdded();
   };
@@ -170,6 +200,31 @@ export function AddBookmarkDialog({
               onFocus={(e) => (e.target.style.borderColor = "var(--bk-accent)")}
               onBlur={(e) => (e.target.style.borderColor = "var(--bk-border)")}
             />
+          </div>
+
+          <div>
+            <label
+              className="text-xs mb-1.5 block font-medium"
+              style={{ color: "var(--bk-text-muted)" }}
+            >
+              Folder
+            </label>
+            <select
+              value={folderPath}
+              onChange={(e) => setFolderPath(e.target.value)}
+              className="w-full px-3 py-2.5 text-xs rounded-[8px] outline-none transition-bk"
+              style={{
+                background: "var(--bk-bg)",
+                border: "1px solid var(--bk-border)",
+                color: "var(--bk-text-primary)",
+              }}
+            >
+              <option value="auto">Auto sort from your bookmarks</option>
+              <option value="__uncategorized__">Keep uncategorized</option>
+              {availableFolders.map((folder) => (
+                <option key={folder} value={folder}>{folder}</option>
+              ))}
+            </select>
           </div>
 
           {/* Target Connected Browser Dropdown Selector */}

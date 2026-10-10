@@ -92,6 +92,93 @@ export function isGenericBrowserFolder(folder?: string | null): boolean {
     || CATEGORIES.some((category) => category.toLowerCase() === normalizedFolder);
 }
 
+export interface BookmarkFolderExample {
+  folder_path: string | null;
+  title: string | null;
+  url: string;
+  description?: string | null;
+  tags?: string[];
+}
+
+const FOLDER_MATCH_STOP_WORDS = new Set([
+  "and", "are", "com", "for", "from", "http", "https", "into", "net", "org", "the", "this", "with", "www",
+]);
+
+function bookmarkTokens(values: Array<string | null | undefined>): Set<string> {
+  return new Set(values
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLowerCase()
+    .replace(/https?:\/\//g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !FOLDER_MATCH_STOP_WORDS.has(token)));
+}
+
+function bookmarkHost(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isDefaultFolderPath(folder: string | null): boolean {
+  return !folder?.trim() || /^(other bookmarks|bookmarks bar|mobile bookmarks|imported)$/i.test(folder.trim());
+}
+
+export function inferBookmarkFolder(
+  title: string,
+  url: string,
+  currentFolder: string | null,
+  examples: BookmarkFolderExample[],
+): string | null {
+  if (!isDefaultFolderPath(currentFolder)) return currentFolder;
+
+  const incomingTokens = bookmarkTokens([title, url]);
+  if (incomingTokens.size === 0) return currentFolder;
+
+  const folderScores = new Map<string, number[]>();
+  const incomingHost = bookmarkHost(url);
+
+  for (const example of examples) {
+    const folder = example.folder_path?.trim();
+    if (!folder || isDefaultFolderPath(folder)) continue;
+
+    const exampleTokens = bookmarkTokens([
+      example.title,
+      example.url,
+      example.description,
+      ...(example.tags ?? []),
+    ]);
+    if (exampleTokens.size === 0) continue;
+
+    let sharedTokens = 0;
+    for (const token of incomingTokens) {
+      if (exampleTokens.has(token)) sharedTokens++;
+    }
+
+    const overlapScore = sharedTokens / Math.sqrt(incomingTokens.size * exampleTokens.size);
+    const hostScore = incomingHost && incomingHost === bookmarkHost(example.url) ? 0.35 : 0;
+    if (overlapScore + hostScore < 0.28) continue;
+
+    const scores = folderScores.get(folder) ?? [];
+    scores.push(overlapScore + hostScore);
+    folderScores.set(folder, scores);
+  }
+
+  const rankedFolders = Array.from(folderScores, ([folder, scores]) => ({
+    folder,
+    score: Math.max(...scores) + Math.min(scores.length - 1, 3) * 0.04,
+  })).sort((first, second) => second.score - first.score);
+
+  if (!rankedFolders.length || (rankedFolders[1] && rankedFolders[0].score - rankedFolders[1].score < 0.08)) {
+    return currentFolder;
+  }
+
+  return rankedFolders[0].folder;
+}
+
 export function normalizeCategory(value: unknown, evidence: string): string {
   const candidate = typeof value === "string"
     ? CATEGORIES.find((category) => category.toLowerCase() === value.trim().toLowerCase())

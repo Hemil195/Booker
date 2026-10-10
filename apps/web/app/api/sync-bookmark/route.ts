@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
+import { inferBookmarkFolder, type BookmarkFolderExample } from "@/lib/bookmarkCategory";
 
 export async function POST(req: NextRequest) {
   // Auth
@@ -70,12 +71,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Upsert bookmark: lookup by browser_bookmark_id or user_id + url
-  let existing: { id: string } | null = null;
+  let existing: { id: string; browser_bookmark_id: string | null } | null = null;
 
   if (browser_bookmark_id) {
     const { data } = await supabase
       .from("bookmarks")
-      .select("id")
+      .select("id, browser_bookmark_id")
       .eq("device_id", auth.deviceId)
       .eq("browser_bookmark_id", browser_bookmark_id)
       .maybeSingle();
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
   if (!existing && url) {
     const { data } = await supabase
       .from("bookmarks")
-      .select("id")
+      .select("id, browser_bookmark_id")
       .eq("user_id", auth.userId)
       .eq("url", url)
       .maybeSingle();
@@ -95,28 +96,38 @@ export async function POST(req: NextRequest) {
   let bookmarkId: string;
 
   if (existing) {
-    // Update existing
-    const { data: updated, error } = await supabase
-      .from("bookmarks")
-      .update({
-        url,
-        title: title ?? url,
-        folder_path: folder_path ?? null,
-        updated_at: new Date().toISOString(),
-        deleted_at: null,
-      })
-      .eq("id", existing.id)
-      .select("id")
-      .single();
+    bookmarkId = existing.id;
 
-    if (error || !updated) {
-      return NextResponse.json(
-        { error: { code: "DB_ERROR", message: error?.message ?? "Update failed" } },
-        { status: 500 },
-      );
+    // A backfill or duplicate create event must not replace the user's saved folder.
+    // Apply browser edits only when this is the same linked browser bookmark.
+    if (event === "updated" && browser_bookmark_id === existing.browser_bookmark_id) {
+      const { error } = await supabase
+        .from("bookmarks")
+        .update({
+          url,
+          title: title ?? url,
+          folder_path: folder_path ?? null,
+          updated_at: new Date().toISOString(),
+          deleted_at: null,
+        })
+        .eq("id", existing.id);
+
+      if (error) {
+        return NextResponse.json(
+          { error: { code: "DB_ERROR", message: error.message } },
+          { status: 500 },
+        );
+      }
     }
-    bookmarkId = updated.id;
   } else {
+    const { data: examples } = await supabase
+      .from("bookmarks")
+      .select("folder_path, title, url, description, tags")
+      .eq("user_id", auth.userId)
+      .not("folder_path", "is", null)
+      .is("deleted_at", null)
+      .limit(1000);
+
     // Insert new
     const { data: inserted, error } = await supabase
       .from("bookmarks")
@@ -125,7 +136,12 @@ export async function POST(req: NextRequest) {
         device_id: auth.deviceId,
         url,
         title: title ?? url,
-        folder_path: folder_path ?? null,
+        folder_path: inferBookmarkFolder(
+          title ?? url,
+          url,
+          folder_path ?? null,
+          (examples ?? []) as BookmarkFolderExample[],
+        ),
         browser_bookmark_id: browser_bookmark_id ?? null,
         source: "browser",
         description_pending: false,
