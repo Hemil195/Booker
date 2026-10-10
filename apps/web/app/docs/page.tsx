@@ -146,13 +146,13 @@ export default function DocsPage() {
 
           <Heading id="what-is-bookar">What is Bookar?</Heading>
           <P>
-            Bookar is a bookmark sync and intelligence platform. It captures every bookmark you save in Chrome, Brave, or Edge, stores them in a personal database on Supabase, automatically generates AI-written summaries using NVIDIA NIM language models, and exposes your entire bookmark history via an MCP (Model Context Protocol) server so your AI assistants can search and reference them.
+            Bookar syncs bookmarks from Chrome, Brave, and Edge into your personal Supabase library. Use the dashboard to search and organize them, regenerate AI summaries when needed, and connect AI clients through the 14-tool MCP endpoint at <Code>/api/mcp</Code>. A standalone MCP server is also available for separate deployment.
           </P>
           <P>
-            The core idea: you keep bookmarking things the way you already do. Bookar makes those bookmarks actually useful — searchable by AI, accessible everywhere, and organized without any manual effort from you.
+            Existing browser bookmarks are imported when you link the extension. New bookmarks keep their browser folder paths; when a new bookmark arrives in a generic browser folder, Bookar can use your saved bookmark patterns to suggest a matching folder.
           </P>
           <Note>
-            Bookar is in open beta. The core sync and MCP features are fully functional. Mobile apps and team workspaces are on the roadmap.
+            AI summaries are generated on demand from a bookmark&apos;s menu or from Settings. They are not automatically generated for every synced bookmark.
           </Note>
 
           <Heading id="browser-extension">Browser Extension</Heading>
@@ -163,7 +163,7 @@ export default function DocsPage() {
           <P><strong style={{ color: "var(--bk-text-primary)" }}>Installing the extension (Load Unpacked)</strong></P>
           <ol style={{ paddingLeft: 20, marginBottom: 20 }}>
             {[
-              "Download bookar-extension.zip from your Settings or from the link below.",
+              "Download the extension ZIP from Connections & AI or use the download link on this page.",
               "Unzip the file to a folder on your computer.",
               "Open Chrome/Brave/Edge and go to chrome://extensions.",
               "Enable Developer Mode (top-right toggle).",
@@ -179,7 +179,7 @@ export default function DocsPage() {
             Once the extension is installed, open your <Link href="/dashboard/connections" style={{ color: "var(--bk-text-primary)" }}>Bookar Dashboard → Connections & AI</Link>. You&apos;ll see a 6-digit linking code. Click the Bookar extension icon, enter the code, give your device a name (e.g. <Code>Work Laptop</Code>), and click <strong>Link Device</strong>.
           </P>
           <P>
-            After linking, the extension begins a one-time backfill of all your existing Chrome bookmarks. New bookmarks added after linking sync within seconds in both directions — bookmarks you add in Bookar are created in your browser, and bookmarks you save in your browser appear in Bookar.
+            After linking, the extension performs a one-time backfill of your existing browser bookmarks. Matching URLs already saved in Bookar are not overwritten during backfill. Later browser additions, edits, moves, and deletions sync to Bookar; bookmarks added in Bookar can also sync to the linked browser.
           </P>
 
           <Heading id="dashboard">Using the Dashboard</Heading>
@@ -191,11 +191,12 @@ export default function DocsPage() {
           </P>
           <ul style={{ paddingLeft: 20, marginBottom: 20 }}>
             {[
-              "Search — filters bookmarks by title, URL, tag, or AI description in real time",
-              "Folders — organize bookmarks into nested folder paths (e.g. Work/Design/Inspiration)",
-              "Select mode — click the checkbox to enter multi-select mode, then Bulk Move, Delete, or Share",
+              "Search — filters bookmarks by title, URL, description, and folder path",
+              "Folders — open nested folder paths such as Work/Design/Inspiration; the URL updates and browser Back returns to the folder list",
+              "Move — select one or more bookmarks, choose Move, then select an existing folder or create a destination folder",
+              "Drag and drop — move bookmarks directly onto a folder card",
               "Share selected — copies a formatted list of selected bookmarks to your clipboard",
-              "Quick add — the + Add Bookmark button in the header adds a bookmark directly to Bookar and syncs it to your browser",
+              "Quick add — add a bookmark from the header and choose its destination folder",
             ].map((item, i) => (
               <li key={i} style={{ fontSize: 14, color: "var(--bk-text-muted)", lineHeight: 1.7, marginBottom: 6 }}>{item}</li>
             ))}
@@ -203,13 +204,13 @@ export default function DocsPage() {
 
           <Heading id="ai-descriptions">AI Descriptions</Heading>
           <P>
-            Whenever a new bookmark is added (from your browser or the dashboard), Bookar calls the <strong style={{ color: "var(--bk-text-primary)" }}>NVIDIA NIM API</strong> with the Llama 3.1 model to generate a 2–3 sentence description of the page. This description appears in the bookmark detail panel and is also what your AI assistants receive when searching through your bookmarks.
+            Use <strong style={{ color: "var(--bk-text-primary)" }}>Regenerate Summary</strong> from a bookmark&apos;s menu to refresh its description, tags, and folder suggestion. From Settings, you can regenerate descriptions for the whole library. Bookar tries Groq first and NVIDIA as a fallback when the corresponding provider keys are configured.
           </P>
           <P>
-            Descriptions are generated asynchronously. You&apos;ll see a &quot;Generating AI description...&quot; placeholder briefly while it processes. If a description fails to generate (network error, API limit), the field is left blank and you can add your own notes.
+            A single-bookmark regeneration keeps the current folder while it creates the new summary. If the result suggests another folder, Bookar asks before moving the bookmark. If neither provider can produce a summary, the existing description is retained; a new bookmark can remain without one until regeneration succeeds.
           </P>
           <Note>
-            AI descriptions require a valid <Code>NVIDIA_API_KEY</Code> to be configured on the server. If you&apos;re self-hosting, add this to your Vercel environment variables. See <Link href="/docs#troubleshooting" style={{ color: "var(--bk-text-primary)" }}>Troubleshooting</Link> if descriptions aren&apos;t appearing.
+            Configure at least one of <Code>GROQ_API_KEY</Code> or <Code>NVIDIA_API_KEY</Code> on the web server for provider-generated summaries. See <Link href="/docs#troubleshooting" style={{ color: "var(--bk-text-primary)" }}>Troubleshooting</Link> if regeneration fails.
           </Note>
 
           <Heading id="connect-claude">Connecting Claude</Heading>
@@ -225,7 +226,7 @@ export default function DocsPage() {
   "mcpServers": {
     "bookar": {
       "type": "http",
-      "url": "https://bookar-rereal.vercel.app/api/mcp",
+      "url": "https://YOUR-BOOKAR-DOMAIN/api/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_BOOKAR_API_KEY"
       }
@@ -236,15 +237,14 @@ export default function DocsPage() {
 
           <Heading id="connect-chatgpt">Connecting ChatGPT</Heading>
           <P>
-            ChatGPT MCP connectors require a Plus, Pro, or Enterprise subscription.
+            Generate an API key on the Connections & AI page, then copy the ChatGPT Connector URL shown there. The URL includes the key as an <Code>api_key</Code> query parameter.
           </P>
           <ol style={{ paddingLeft: 20, marginBottom: 16 }}>
             {[
               "Open ChatGPT → Settings → Developer Mode → Enable.",
               "Go to Connectors → Create Connector.",
-              'Set Server URL to https://bookar-rereal.vercel.app/api/mcp',
-              "Set Authentication to API Key.",
-              "Paste your Bookar API Key (bk_live_...).",
+              "Paste the Connector URL copied from Bookar Connections & AI.",
+              "Set Authentication to No Auth (or None); the URL already includes the key.",
               "Save and start a new conversation. You can now ask ChatGPT to search your bookmarks.",
             ].map((step, i) => (
               <li key={i} style={{ fontSize: 14, color: "var(--bk-text-muted)", lineHeight: 1.7, marginBottom: 6 }}>{step}</li>
@@ -253,16 +253,27 @@ export default function DocsPage() {
 
           <Heading id="mcp-tools">MCP & Other Tools</Heading>
           <P>
-            Any tool that supports the MCP protocol can connect to Bookar. This includes Cursor, Windsurf, Continue, and custom MCP clients. Use the same URL (<Code>https://bookar-rereal.vercel.app/api/mcp</Code>) and Bearer token authentication with your Bookar API key.
+            Any tool that supports the MCP protocol can connect to Bookar, including Claude, Cursor, Windsurf, and custom MCP clients. Use the endpoint shown on Connections & AI (usually <Code>https://YOUR-BOOKAR-DOMAIN/api/mcp</Code>) and authenticate with the API key using a Bearer header. The ChatGPT URL is a special case that carries the key in its query string.
           </P>
           <P>
             The MCP server exposes these tools to your AI:
           </P>
           <ul style={{ paddingLeft: 20, marginBottom: 20 }}>
             {[
-              "search_bookmarks — semantic and keyword search across all bookmarks",
-              "get_recent_bookmarks — returns the N most recently added bookmarks",
-              "add_bookmark — adds a new bookmark to your Bookar account",
+              "save_bookmark — save a URL with an optional title, notes, folder, and tags",
+              "get_bookmark — fetch a bookmark by ID",
+              "update_bookmark — edit a bookmark's title, notes, folder, or tags",
+              "delete_bookmark — move a bookmark to trash",
+              "restore_bookmark — restore a trashed bookmark",
+              "archive_bookmark — move a bookmark to the _archive folder",
+              "find — search bookmarks by query, folder, tag, or saved date",
+              "list_by_folder — list a folder or summarize top-level folders",
+              "get_tags — list tags and usage counts",
+              "workspace_stats — summarize library, folder, tag, and duplicate counts",
+              "find_duplicates — find bookmarks with matching or similar URLs",
+              "analyse_topic — group and summarize bookmarks related to a topic",
+              "context_pack — gather a topic-focused reading pack from your library",
+              "bulk_tag — apply a tag to bookmarks matching a keyword",
             ].map((t, i) => (
               <li key={i} style={{ fontSize: 14, color: "var(--bk-text-muted)", lineHeight: 1.7, marginBottom: 6 }}><Code>{t.split(" — ")[0]}</Code> — {t.split(" — ")[1]}</li>
             ))}
@@ -277,7 +288,7 @@ export default function DocsPage() {
               },
               {
                 q: "AI descriptions are stuck on 'Generating…'",
-                a: "This usually means the NVIDIA_API_KEY environment variable is missing or expired. If you're self-hosting, add a valid key in your Vercel project settings under Environment Variables.",
+                a: "Check that at least one provider key, GROQ_API_KEY or NVIDIA_API_KEY, is set in the web app environment. Groq is tried first when configured, followed by NVIDIA.",
               },
               {
                 q: "Claude / ChatGPT can't find my bookmarks",
@@ -285,7 +296,7 @@ export default function DocsPage() {
               },
               {
                 q: "The extension was linked but my old bookmarks didn't appear",
-                a: "The initial backfill runs once after linking. If it didn't trigger, try unlinking and re-linking your device. All your existing Chrome bookmarks will be uploaded on the next link.",
+                a: "The initial backfill runs once per extension profile. Confirm the extension is connected and its API_BASE points to this Bookar web app. Backfill skips URLs already in Bookar to preserve their saved data.",
               },
               {
                 q: "I deleted a bookmark in Chrome but it's still in Bookar",

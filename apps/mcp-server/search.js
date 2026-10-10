@@ -209,22 +209,30 @@ function scoreBookmark(bm, { words, expanded, originalQuery }) {
 }
 
 // ── Main search function ──────────────────────────────────────────────────────
-async function searchBookmarks(supabase, uid, query, { limit = 20, withTimeout } = {}) {
+async function searchBookmarks(supabase, uid, query, { limit = 20, withTimeout, folder, tag, saved_after, saved_before } = {}) {
   const parsed = parseQuery(query);
+  const applyFilters = (request) => {
+    if (folder) request = request.eq("folder_path", folder);
+    if (tag) request = request.contains("tags", [tag.trim().toLowerCase()]);
+    if (saved_after) request = request.gte("created_at", saved_after);
+    if (saved_before) request = request.lte("created_at", saved_before);
+    return request;
+  };
 
   // All stop words / empty query → recent bookmarks
   if (!parsed.words.length) {
-    const fetch = supabase
+    const fetch = applyFilters(supabase
       .from("bookmarks")
       .select("id, title, url, description, tags, folder_path, created_at")
       .eq("user_id", uid).is("deleted_at", null)
-      .order("created_at", { ascending: false }).limit(limit);
-    const { data } = withTimeout ? await withTimeout(fetch) : await fetch;
+      .order("created_at", { ascending: false }).limit(limit));
+    const { data, error } = withTimeout ? await withTimeout(fetch) : await fetch;
+    if (error) throw new Error(error.message);
     return data || [];
   }
 
   // Build broad OR filter
-  const phrase = parsed.originalQuery.replace(/'/g, "''");
+  const phrase = parsed.originalQuery.replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
   const keyTerms = [...new Set([...parsed.words, ...parsed.expanded])]
     .filter((t) => t.length > 2)
     .slice(0, 8);
@@ -240,13 +248,13 @@ async function searchBookmarks(supabase, uid, query, { limit = 20, withTimeout }
   ];
   const uniqueParts = [...new Set(parts)];
 
-  const fetch = supabase
+  const fetch = applyFilters(supabase
     .from("bookmarks")
     .select("id, title, url, description, tags, folder_path, created_at")
     .eq("user_id", uid).is("deleted_at", null)
     .or(uniqueParts.join(","))
     .order("created_at", { ascending: false })
-    .limit(limit * 5);
+    .limit(limit * 5));
 
   const { data, error } = withTimeout ? await withTimeout(fetch) : await fetch;
   if (error) throw new Error(error.message);

@@ -51,11 +51,12 @@ export function NoBookmarksState({
 interface LinkingCodeCardProps {
   userId: string;
   onLinked?: () => void;
+  compact?: boolean;
 }
 
 type CodeState = "loading" | "active" | "expired" | "error" | "linked";
 
-export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
+export function LinkingCodeCard({ userId, onLinked, compact = false }: LinkingCodeCardProps) {
   const [state, setState] = useState<CodeState>("loading");
   const [code, setCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -137,7 +138,7 @@ export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
 
   if (state === "linked") {
     return (
-      <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+      <div className={`flex flex-col items-center justify-center ${compact ? "py-8" : "py-20"} animate-fade-in`}>
         <div
           className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
           style={{ background: "rgba(146,220,229,0.15)", border: "2px solid var(--bk-accent)" }}
@@ -155,20 +156,20 @@ export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center animate-fade-in">
+    <div className={`flex flex-col items-center justify-center ${compact ? "py-6" : "py-16"} px-4 text-center animate-fade-in`}>
       <div className="w-full max-w-sm">
         {/* Header */}
-        <h2 className="text-xl font-semibold mb-2" style={{ color: "var(--bk-text-primary)" }}>
+        <h2 className={`${compact ? "text-lg" : "text-xl"} font-semibold mb-2`} style={{ color: "var(--bk-text-primary)" }}>
           Connect your browser
         </h2>
-        <p className="text-sm mb-8" style={{ color: "var(--bk-text-muted)", lineHeight: "1.6" }}>
+        <p className={`text-sm ${compact ? "mb-4" : "mb-8"}`} style={{ color: "var(--bk-text-muted)", lineHeight: "1.6" }}>
           Install the Bookar extension, then enter this code in the extension popup to start
           syncing.
         </p>
 
         {/* Code display */}
         <div
-          className="bk-card p-8 mb-4"
+          className={`bk-card ${compact ? "p-5" : "p-8"} mb-4`}
           style={{
             boxShadow: state === "active"
               ? "0 0 0 1px rgba(146,220,229,0.2), 0 0 30px rgba(146,220,229,0.08)"
@@ -248,7 +249,7 @@ export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
         )}
 
         {/* Download Button */}
-        <div className="mt-6">
+        <div className={compact ? "mt-4" : "mt-6"}>
           <a
             href="/api/extension-zip"
             download
@@ -269,7 +270,7 @@ export function LinkingCodeCard({ userId, onLinked }: LinkingCodeCardProps) {
 
         {/* Install instructions */}
         <div
-          className="mt-6 p-4 rounded-[12px] text-left space-y-2"
+          className={`${compact ? "mt-4" : "mt-6"} p-4 rounded-[12px] text-left space-y-2`}
           style={{ background: "var(--bk-surface)", border: "1px solid var(--bk-border)" }}
         >
           <p className="text-xs font-medium" style={{ color: "var(--bk-text-primary)" }}>

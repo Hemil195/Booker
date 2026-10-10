@@ -74,19 +74,47 @@ const GLOBAL_CSS = `
     .grid-two-col  { grid-template-columns: 1fr !important; }
     .section-pad   { padding: 64px 20px !important; }
     .angled-pad    { padding: 80px 20px !important; }
-    .hero-h1       { font-size: clamp(34px, 9vw, 54px) !important; }
+    .landing-nav { padding: 12px 16px !important; }
+    .landing-nav-inner { max-width: none !important; }
+    .landing-brand-mark { width: 34px !important; height: 34px !important; }
+    .landing-brand-name { font-size: 17px !important; }
+    .hero-section { padding: 104px 20px 32px !important; }
+    .hero-content { max-width: 680px !important; }
+    .hero-h1 { font-size: 52px !important; line-height: 1.04 !important; }
+    .hero-copy { font-size: 17px !important; }
+    .hero-actions { max-width: 420px; margin: 0 auto; flex-direction: column; }
+    .hero-actions a { width: 100%; justify-content: center; min-height: 50px; font-size: 15px !important; }
+    .hero-following-section { padding-top: 40px !important; }
     .roadmap-grid  { grid-template-columns: 1fr !important; }
     .footer-glass  { font-size: clamp(72px, 22vw, 140px) !important; }
   }
   @media (min-width: 769px) {
     .mobile-only { display: none !important; }
+    .landing-nav { padding: 16px 32px !important; }
+    .landing-nav-inner { max-width: 1280px !important; }
+    .landing-brand-mark { width: 36px !important; height: 36px !important; }
+    .landing-brand-name { font-size: 18px !important; }
+    .hero-section { padding: 112px 32px 26px !important; }
+    .hero-content { max-width: 1080px !important; }
+    .hero-h1 { font-size: 84px !important; line-height: 1.04 !important; }
+    .hero-copy { font-size: 19px !important; max-width: 720px !important; }
+    .hero-actions a { min-height: 54px; padding: 14px 28px !important; font-size: 16px !important; }
+    .hero-following-section { padding-top: 40px !important; }
+  }
+  @media (min-width: 1440px) {
+    .hero-h1 { font-size: 96px !important; }
+  }
+  @media (max-width: 480px) {
+    .hero-section { padding: 96px 16px 28px !important; }
+    .hero-h1 { font-size: 42px !important; }
+    .hero-copy { font-size: 16px !important; }
   }
 `;
 
 /* ── Section wrappers ────────────────────────────────────────────── */
-function Section({ children, id }: { children: React.ReactNode; id?: string }) {
+function Section({ children, id, className }: { children: React.ReactNode; id?: string; className?: string }) {
   return (
-    <section id={id} className="section-pad" style={{ padding: "100px 24px", position: "relative" }}>
+    <section id={id} className={`section-pad ${className ?? ""}`} style={{ padding: "100px 24px", position: "relative" }}>
       <div style={{ maxWidth: 960, margin: "0 auto", position: "relative", zIndex: 10 }}>{children}</div>
     </section>
   );
@@ -143,7 +171,7 @@ function useDemoSequence(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cursorPos, setCursorPos] = useState({ x: 60, y: 45 });
   const [clicking, setClicking] = useState(false);
-  const [label] = useState("Vikas");
+  const [label] = useState("Hemil");
 
   const STEPS: Array<{
     x: number; y: number;   // % of mockup width/height
@@ -374,7 +402,7 @@ function InteractiveDashboard() {
                     </div>
                     {isSel && (
                       <div className="fade-up" style={{ marginTop: 8, padding: "8px 10px", background: "#09090b", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", fontSize: 11, color: "#a1a1aa" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#fafafa", fontWeight: 600, marginBottom: 3 }}><SparklesIcon size={12} color="#10b981" /> AI Summary (NVIDIA NIM)</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 5, color: "#fafafa", fontWeight: 600, marginBottom: 3 }}><SparklesIcon size={12} color="#10b981" /> AI Summary</div>
                         <p style={{ margin: 0, lineHeight: 1.5 }}>{bm.aiSummary}</p>
                       </div>
                     )}
@@ -553,13 +581,13 @@ const ROADMAP = [
   },
   {
     num: "02", status: "LIVE",    color: "#38bdf8",
-    title: "NVIDIA NIM AI summaries",
-    bullets: ["Llama 3.1 70B on-demand inference", "Auto-category & semantic tag extraction", "Batch processing while you browse"],
+    title: "On-demand AI summaries",
+    bullets: ["Groq first, NVIDIA fallback", "Summary, tag, and folder suggestions", "Confirm before changing a bookmark folder"],
   },
   {
-    num: "03", status: "BUILDING", color: "#f59e0b",
-    title: "Universal MCP integration",
-    bullets: ["Model Context Protocol server", "Deep search across full page content", "Public bookmark collections & sharing"],
+    num: "03", status: "LIVE", color: "#38bdf8",
+    title: "MCP bookmark tools",
+    bullets: ["14 tools for search, organization, and insights", "Connect Claude, ChatGPT, Cursor, and other MCP clients", "Web endpoint plus optional standalone server"],
   },
   {
     num: "04", status: "PLANNED", color: "#a855f7",
@@ -688,54 +716,54 @@ export function LandingPage() {
       <div style={{ position: "absolute", top: 100, left: "50%", transform: "translateX(-50%)", width: 600, height: 350, background: "radial-gradient(circle,rgba(255,255,255,0.07) 0%,transparent 70%)", filter: "blur(60px)", pointerEvents: "none" }} />
 
       {/* Nav */}
-      <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "rgba(9,9,11,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "14px 24px" }}>
-        <div style={{ maxWidth: 960, margin: "0 auto", width: "100%", display: "flex", alignItems: "center", gap: 12 }}>
+      <nav className="landing-nav" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "rgba(9,9,11,0.85)", backdropFilter: "blur(12px)", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "16px 32px" }}>
+        <div className="landing-nav-inner" style={{ maxWidth: 1280, margin: "0 auto", width: "100%", display: "flex", alignItems: "center", gap: 16 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/Logo.png" alt="Bookar" style={{ width: 28, height: 28, borderRadius: 8, objectFit: "cover" }} />
-          <span style={{ fontWeight: 700, fontSize: 15, color: L.text }}>Bookar</span>
+          <img className="landing-brand-mark" src="/Logo.png" alt="Bookar" style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover" }} />
+          <span className="landing-brand-name" style={{ fontWeight: 700, fontSize: 18, color: L.text }}>Bookar</span>
           <div style={{ flex: 1 }} />
-          <Link href="/docs"  className="desktop-only" style={{ fontSize: 13, color: L.muted, textDecoration: "none", padding: "4px 10px" }}>Docs</Link>
-          <Link href="/terms" className="desktop-only" style={{ fontSize: 13, color: L.muted, textDecoration: "none", padding: "4px 10px" }}>Terms</Link>
-          <Link href="/login" style={{ fontSize: 13, color: "#09090b", background: L.text, textDecoration: "none", padding: "6px 16px", borderRadius: 8, fontWeight: 600 }}>Sign in</Link>
+          <Link href="/docs" className="desktop-only" style={{ fontSize: 15, color: L.muted, textDecoration: "none", padding: "8px 12px" }}>Docs</Link>
+          <Link href="/terms" className="desktop-only" style={{ fontSize: 15, color: L.muted, textDecoration: "none", padding: "8px 12px" }}>Terms</Link>
+          <Link href="/login" style={{ fontSize: 15, color: "#09090b", background: L.text, textDecoration: "none", padding: "10px 20px", borderRadius: 8, fontWeight: 600 }}>Sign in</Link>
         </div>
       </nav>
 
       {/* HERO */}
-      <section style={{ padding: "160px 24px 80px", textAlign: "center", position: "relative" }}>
-        <div style={{ maxWidth: 760, margin: "0 auto" }}>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 20, padding: "5px 14px", marginBottom: 28 }}>
-            <span className="pulse-dot" style={{ width: 7, height: 7, background: "#10b981", borderRadius: "50%" }} />
-            <span style={{ fontSize: 11, color: "#10b981", fontWeight: 700, letterSpacing: "0.08em" }}>BETA IS LIVE</span>
+      <section className="hero-section" style={{ padding: "112px 32px 26px", textAlign: "center", position: "relative" }}>
+        <div className="hero-content" style={{ maxWidth: 1080, margin: "0 auto" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 9, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 20, padding: "7px 16px", marginBottom: 24 }}>
+            <span className="pulse-dot" style={{ width: 8, height: 8, background: "#10b981", borderRadius: "50%" }} />
+            <span style={{ fontSize: 13, color: "#10b981", fontWeight: 700, letterSpacing: "0.08em" }}>BETA IS LIVE</span>
           </div>
 
-          <h1 className="hero-h1" style={{ fontSize: "clamp(38px,6vw,72px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "-0.03em", color: L.text, marginBottom: 24 }}>
+          <h1 className="hero-h1" style={{ fontSize: 84, fontWeight: 700, lineHeight: 1.04, letterSpacing: "-0.03em", color: L.text, marginBottom: 22 }}>
             all your bookmarks,<br />
             <span style={{ color: L.muted }}>finally searchable</span>
           </h1>
 
-          <p style={{ fontSize: 17, color: L.muted, lineHeight: 1.7, maxWidth: 540, margin: "0 auto 40px" }}>
-            Bookar syncs every browser tab you save, adds AI descriptions, and makes your entire reading history searchable by Claude, ChatGPT, or any MCP-compatible AI tool.
+          <p className="hero-copy" style={{ fontSize: 19, color: L.muted, lineHeight: 1.65, maxWidth: 720, margin: "0 auto 32px" }}>
+            Bookar syncs your browser bookmarks and folder paths, lets you regenerate AI summaries on demand, and makes your library searchable and manageable through 14 MCP tools.
           </p>
 
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/login" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: L.text, color: "#09090b", padding: "12px 24px", borderRadius: 10, fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
-              Sign in with Google <ArrowRightIcon size={14} />
+          <div className="hero-actions" style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
+            <Link href="/login" style={{ display: "inline-flex", alignItems: "center", gap: 9, background: L.text, color: "#09090b", padding: "14px 28px", borderRadius: 10, fontWeight: 700, fontSize: 16, textDecoration: "none" }}>
+              Sign in with Google <ArrowRightIcon size={17} />
             </Link>
-            <a href="/api/extension-zip" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: L.accentDim, color: L.text, padding: "12px 24px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none", border: "1px solid rgba(255,255,255,0.12)" }}>
-              <DownloadIcon size={14} /> Download Extension
+            <a href="/api/extension-zip" style={{ display: "inline-flex", alignItems: "center", gap: 9, background: L.accentDim, color: L.text, padding: "14px 28px", borderRadius: 10, fontWeight: 600, fontSize: 16, textDecoration: "none", border: "1px solid rgba(255,255,255,0.12)" }}>
+              <DownloadIcon size={17} /> Download Extension
             </a>
           </div>
         </div>
       </section>
 
       {/* SECTION 1: Dashboard — desktop interactive, mobile simplified */}
-      <Section>
+      <Section className="hero-following-section">
         {/* Desktop */}
         <div className="desktop-only" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 50, alignItems: "start", paddingTop: 24 }}>
           <div>
             <Eyebrow>The Dashboard</Eyebrow>
             <H2>all your tabs,<br />none of the chaos</H2>
-            <Body>Every bookmark you save across any browser lands here — sorted, tagged, and described by AI. No manual filing. No lost tabs.</Body>
+            <Body>Your browser bookmarks land in one searchable library. Keep your folder structure, move links when you choose, and regenerate an AI summary whenever you need one.</Body>
             <Link href="/login" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: L.text, textDecoration: "none", marginTop: 24, fontSize: 13, fontWeight: 600 }}>
               Try it free <ChevronRightIcon size={14} />
             </Link>
@@ -747,9 +775,9 @@ export function LandingPage() {
         <div className="mobile-only">
           <Eyebrow>The Dashboard</Eyebrow>
           <H2>all your tabs,<br />none of the chaos</H2>
-          <Body style={{ marginBottom: 24 }}>Every bookmark you save across any browser lands here — sorted, tagged, and described by AI. No manual filing.</Body>
+          <Body style={{ marginBottom: 24 }}>Your browser bookmarks land in one searchable library. Keep your folders, move links when you choose, and regenerate AI summaries when you need them.</Body>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {["Works in Chrome, Brave, and Edge","AI summaries for every saved link","Search bookmarks from Claude & ChatGPT"].map(f => (
+            {["Works in Chrome, Brave, and Edge","On-demand AI summaries and folder suggestions","Search bookmarks from Claude & ChatGPT"].map(f => (
               <div key={f} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.04)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)" }}>
                 <CheckIcon size={14} color="#10b981" />
                 <span style={{ fontSize: 13, color: L.muted }}>{f}</span>
@@ -771,9 +799,9 @@ export function LandingPage() {
           <div>
             <Eyebrow>The Extension</Eyebrow>
             <H2>every browser,<br />one place</H2>
-            <Body>Install the Bookar extension in Chrome, Brave, or Edge. Type a 6-digit code and your bookmarks sync both ways in real time — no passwords required.</Body>
+            <Body>Install the Bookar extension in Chrome, Brave, or Edge and link it with a 6-digit code. Existing bookmarks are imported once; browser changes and Bookar additions sync across your linked devices.</Body>
             <div style={{ marginTop: 24, display: "flex", flexDirection: "column", gap: 10 }}>
-              {["One 6-digit code to link any browser","Saves new bookmarks in both directions","Works offline — syncs automatically"].map(f => (
+              {["One 6-digit code to link a browser","Browser changes and Bookar additions sync","Failed syncs retry in the background"].map(f => (
                 <div key={f} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <CheckIcon size={14} color="#10b981" />
                   <span style={{ fontSize: 13, color: L.muted }}>{f}</span>

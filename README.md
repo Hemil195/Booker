@@ -4,14 +4,15 @@
 
 ## What it does
 
-- Syncs browser bookmarks in real time across all your devices
-- Auto-generates AI descriptions (NVIDIA NIM, `meta/llama-3.1-8b-instruct`)
-- Searchable from Claude, ChatGPT, and any AI assistant via MCP
+- Syncs bookmarks from Chromium browsers and keeps their folder paths in Bookar
+- Lets you search, organize, move, share, and manage bookmarks from the dashboard
+- Generates or regenerates AI summaries on demand using Groq, with NVIDIA as a fallback
+- Exposes a 14-tool MCP server for AI clients such as Claude and ChatGPT
 
 ## Monorepo structure
 
 ```
-/apps/web          — Next.js 15 dashboard + API routes
+/apps/web          — Next.js 16.2 dashboard, docs, and API/MCP routes
 /apps/mcp-server   — Standalone MCP server (Streamable HTTP)
 /extension         — Manifest V3 Chrome/Brave/Edge extension
 /supabase          — DB migrations + Edge Functions
@@ -23,58 +24,61 @@
 
 | What | Where |
 |---|---|
+| Node.js 20.9+ and npm | nodejs.org |
 | Supabase project | supabase.com |
 | Google OAuth credentials | console.cloud.google.com |
-| NVIDIA NIM API key | build.nvidia.com |
+| Groq and/or NVIDIA API key | console.groq.com / build.nvidia.com |
 | Vercel account | vercel.com |
 
 ### 2. Supabase setup
 
 ```bash
-# Run the migration (paste in Supabase SQL editor or use CLI)
-# File: supabase/migrations/0001_init.sql
+# Run both migrations in order (paste into Supabase SQL Editor or use the CLI):
+# supabase/migrations/0001_init.sql
+# supabase/migrations/0002_add_unique_bookmark_constraint.sql
 
 # Enable Google Auth provider in Supabase dashboard:
 # Authentication → Providers → Google → enable
 
-# Set Edge Function secrets:
-supabase secrets set NVIDIA_API_KEY=<your-key>
-supabase secrets set NVIDIA_MODEL=meta/llama-3.1-8b-instruct
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=<your-key>
-supabase secrets set API_KEY_HASH_SECRET=<random-32-char-string>
-
-# Deploy Edge Function:
-supabase functions deploy ingest-bookmark
+# Database → Publications → supabase_realtime:
+# Enable the bookmarks table so dashboard updates can arrive in real time.
 ```
 
 ### 3. Web app
 
 ```bash
 cd apps/web
-cp .env.example .env.local
-# Fill in all values in .env.local
 npm install
-npm run dev        # dev
-vercel             # production
+# Create .env.local with the web variables listed below.
+npm run dev
 ```
+
+For production, set the same variables in Vercel and set the project root directory to `apps/web`.
+Run `npm run build` locally to verify a production build.
 
 ### 4. MCP server
 
 ```bash
 cd apps/mcp-server
-cp .env.example .env
-# Fill in SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, API_KEY_HASH_SECRET
-node index.js      # dev (port 3001)
-vercel             # production (separate Vercel project)
+npm install
+# Create .env with SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, API_KEY_HASH_SECRET.
+npm run dev
 ```
+
+The web app already serves MCP at `/api/mcp`; this standalone server is optional. If deployed
+separately, set its Vercel project root to `apps/mcp-server`.
 
 ### 5. Browser extension
 
 1. Open `chrome://extensions` (or `brave://extensions`)
 2. Enable **Developer Mode**
 3. Click **Load Unpacked** → select the `/extension` folder
-4. Update `API_BASE` in `extension/background.js` and `extension/popup.js` to your Vercel URL
+4. Set `API_BASE` in `extension/background.js` and `extension/popup.js` to `http://localhost:3000` for local development or your deployed web-app URL for production
 5. Click the Bookar icon → enter the 6-digit linking code from the dashboard
+
+The first link backfills existing browser bookmarks. Matching URLs already in Bookar are left
+unchanged during that backfill; newly imported bookmarks keep their browser folder or use the
+user's saved-folder patterns when the browser path is generic.
 
 ## Environment variables
 
@@ -84,12 +88,16 @@ vercel             # production (separate Vercel project)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-NVIDIA_API_KEY=
-NVIDIA_MODEL=meta/llama-3.1-8b-instruct
 API_KEY_HASH_SECRET=
 NEXT_PUBLIC_SITE_URL=
-MCP_SERVER_URL=http://localhost:3001/api/mcp  # local dev only
+GROQ_API_KEY=                    # optional; tried first when configured
+GROQ_MODEL=openai/gpt-oss-20b   # optional
+NVIDIA_API_KEY=                  # optional fallback provider
+NVIDIA_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b  # optional
 ```
+
+Set at least one AI provider key to enable AI-generated summaries. `NEXT_PUBLIC_SITE_URL` should
+be the public web-app origin in production; local development can use `http://localhost:3000`.
 
 ### apps/mcp-server/.env
 
@@ -102,7 +110,8 @@ PORT=3001
 
 ## Connecting AI tools
 
-All tools use the same MCP server URL + API key generated from the dashboard Connections page.
+Use the MCP endpoint shown on the dashboard's **Connections & AI** page and an API key generated
+there. The web app endpoint is `/api/mcp`; the standalone MCP server can be deployed separately.
 
 **Claude Desktop**: Add to `claude_desktop_config.json`:
 ```json
@@ -110,20 +119,26 @@ All tools use the same MCP server URL + API key generated from the dashboard Con
   "mcpServers": {
     "bookar": {
       "type": "http",
-      "url": "https://your-mcp-server.vercel.app/api/mcp",
+      "url": "https://your-bookar-domain/api/mcp",
       "headers": { "Authorization": "Bearer YOUR_API_KEY" }
     }
   }
 }
 ```
 
-**ChatGPT** (Plus/Pro/Business/Enterprise): Settings → Developer Mode → Connectors → Create → paste MCP server URL, choose API key auth.
+**ChatGPT**: In **Connections & AI**, generate a key and copy the ChatGPT connector URL. In ChatGPT,
+open Settings → Developer Mode → Connectors → Create Connector, paste that URL, and set
+Authentication to **No Auth**. The copied URL includes the API key as a query parameter.
+
+The MCP endpoint provides these tools: `save_bookmark`, `get_bookmark`, `update_bookmark`,
+`delete_bookmark`, `restore_bookmark`, `archive_bookmark`, `find`, `list_by_folder`, `get_tags`,
+`workspace_stats`, `find_duplicates`, `analyse_topic`, `context_pack`, and `bulk_tag`.
 
 **REST/OpenAPI fallback**: Import `public/openapi.yaml` into Zapier, Make, Copilot Studio, etc.
 
 ## Security
 
-- All API keys stored hashed (HMAC-SHA256) — never in plaintext
+- API keys are stored on the server as HMAC-SHA256 hashes; newly generated raw keys are shown once
 - RLS enforced on all user tables
 - Linking codes expire in 10 minutes, single-use
 - `SUPABASE_SERVICE_ROLE_KEY` never exposed to browser bundles

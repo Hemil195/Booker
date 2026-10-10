@@ -13,7 +13,7 @@ This guide details the complete production deployment flow for **Bookar**:
 ### Step 1: Database Schema & Realtime Setup
 1. Log in to your [Supabase Dashboard](https://supabase.com/dashboard) and open your project (or create a new project).
 2. Open the **SQL Editor** tab from the left sidebar.
-3. Open [`supabase/migrations/0001_init.sql`](file:///d:/codevs/Bookar/supabase/migrations/0001_init.sql), copy its contents, paste into the SQL Editor, and click **Run**.
+3. Run the migrations in order in the SQL Editor: [`0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_add_unique_bookmark_constraint.sql`](supabase/migrations/0002_add_unique_bookmark_constraint.sql).
 4. Go to **Database** $\rightarrow$ **Publications** $\rightarrow$ Click `supabase_realtime` and ensure the `bookmarks` table is enabled for Realtime events.
 
 ### Step 2: Authentication & Redirect URLs
@@ -42,17 +42,23 @@ This guide details the complete production deployment flow for **Bookar**:
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL | `https://xxxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase Public Anon Key | `eyJhbGciOi...` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase Private Service Role Key | `eyJhbGciOi...` |
-| `NVIDIA_API_KEY` | NVIDIA NIM LLM API Key | `nvapi-xxxx...` |
-| `NVIDIA_MODEL` | NVIDIA LLM Model Engine | `meta/llama-3.1-8b-instruct` |
+| `GROQ_API_KEY` | Groq API key (tried first when configured) | `gsk-xxxx...` |
+| `GROQ_MODEL` | Groq model (optional) | `openai/gpt-oss-20b` |
+| `NVIDIA_API_KEY` | NVIDIA NIM API key (fallback provider) | `nvapi-xxxx...` |
+| `NVIDIA_MODEL` | NVIDIA model (optional) | `nvidia/nemotron-3.5-lightning-30b-a3b` |
 | `API_KEY_HASH_SECRET` | Secret key for hashing API keys (32+ chars) | `your-secure-random-32-char-string` |
 | `NEXT_PUBLIC_SITE_URL` | Live Production Web Domain | `https://your-app-domain.vercel.app` |
-| `MCP_SERVER_URL` | Public URL of deployed MCP Server | `https://your-mcp-domain.vercel.app/api/mcp` |
 
-5. Click **Deploy**.
+Configure at least one AI provider key to generate summaries. `NEXT_PUBLIC_SITE_URL` is used when
+building the downloadable extension package; set it to the public web-app origin. Then click
+**Deploy**.
 
 ---
 
-### Option B: Standalone MCP Server (`apps/mcp-server`)
+### Option B: Standalone MCP Server (`apps/mcp-server`, optional)
+
+The web app already exposes MCP at `https://your-app-domain.vercel.app/api/mcp`. Deploy the
+standalone server only if you want a separate MCP service.
 
 1. In Vercel, click **Add New Project** $\rightarrow$ Import the same repository.
 2. Set **Root Directory** to `apps/mcp-server`.
@@ -100,7 +106,8 @@ Generate an API Key from your Bookar Dashboard (**Connections & AI** tab), then 
 ## 4. Browser Extension Deployment & Publishing
 
 ### Step 1: Update API Base Endpoint
-In [`extension/background.js`](file:///d:/codevs/Bookar/extension/background.js) and [`extension/popup.js`](file:///d:/codevs/Bookar/extension/popup.js), change `API_BASE` to your production URL:
+In [`extension/background.js`](extension/background.js) and [`extension/popup.js`](extension/popup.js),
+set `API_BASE` to your production web-app URL:
 
 ```javascript
 const API_BASE = "https://your-app-domain.vercel.app";
@@ -110,15 +117,16 @@ const API_BASE = "https://your-app-domain.vercel.app";
 1. Open Chrome/Brave/Edge and navigate to `chrome://extensions`.
 2. Enable **Developer Mode** toggle (top right).
 3. Click **Load unpacked** $\rightarrow$ select the `extension/` folder in your project.
-4. Click the Bookar extension icon and link your device using the 6-digit code from your production dashboard!
+4. Open Connections & AI in the Bookar dashboard, then link the extension using the displayed 6-digit code.
+5. The first link backfills existing browser bookmarks. Existing Bookar records with matching URLs are preserved.
 
 ---
 
 ## Summary Checklist
 
-- [ ] Run `supabase/migrations/0001_init.sql` on Supabase database.
+- [ ] Run migrations `0001_init.sql` and `0002_add_unique_bookmark_constraint.sql` in order.
 - [ ] Configure Supabase Google OAuth provider & Auth redirect URLs.
 - [ ] Deploy `apps/web` on Vercel with all production environment variables.
-- [ ] Deploy `apps/mcp-server` on Vercel.
+- [ ] Optionally deploy `apps/mcp-server` on Vercel if you want a separate MCP service.
 - [ ] Update `API_BASE` in extension files to live Vercel domain.
 - [ ] Test linking browser extension with live dashboard.

@@ -274,7 +274,7 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
           <div className="py-6 text-center rounded-[10px]" style={{ border: "1px dashed var(--bk-border)" }}>
             <LaptopIcon className="w-6 h-6 mx-auto mb-2" style={{ color: "var(--bk-text-muted)" }} />
             <p className="text-xs" style={{ color: "var(--bk-text-muted)" }}>
-              No browser extensions connected yet. Use the 6-digit code on the home screen to link a browser.
+              No browser extensions connected yet. Use the linking code below to connect your browser.
             </p>
           </div>
         ) : (
@@ -329,7 +329,7 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
       </div>
 
       {browserDevices.length === 0 && (
-        <LinkingCodeCard userId={userId} onLinked={() => window.location.reload()} />
+        <LinkingCodeCard userId={userId} onLinked={() => window.location.reload()} compact />
       )}
 
       {/* ── SECTION 2: MCP Server URL ─────────────────────────────────────── */}

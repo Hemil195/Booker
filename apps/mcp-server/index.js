@@ -9,7 +9,7 @@ require("dotenv").config();
 const { McpServer } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { createClient } = require("@supabase/supabase-js");
-const { createHmac, randomBytes } = require("crypto");
+const { createHmac } = require("crypto");
 const http = require("http");
 const { searchBookmarks } = require("./search.js");
 
@@ -31,12 +31,11 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 
 // ── Query timeout ─────────────────────────────────────────────────────────────
 function withTimeout(thenable, ms = 8000) {
-  return Promise.race([
-    Promise.resolve(thenable),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`DB query timed out after ${ms}ms`)), ms),
-    ),
-  ]);
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`DB query timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([Promise.resolve(thenable), timeout]).finally(() => clearTimeout(timeoutId));
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -86,7 +85,10 @@ function createBookarMcpServer(userId, deviceId) {
     },
     async ({ url, title, notes, folder, tags }) => {
       if (!url) return { content: [{ type: "text", text: "❌ Error: `url` is required." }] };
-      try { new URL(url); } catch {
+      try {
+        const parsedUrl = new URL(url);
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error("Unsupported URL protocol");
+      } catch {
         return { content: [{ type: "text", text: "❌ Invalid URL. Must start with http:// or https://" }] };
       }
 
@@ -98,16 +100,16 @@ function createBookarMcpServer(userId, deviceId) {
         return { content: [{ type: "text", text: `⚠️ Already saved as "${existing[0].title}" (ID: \`${existing[0].id}\`). Use update_bookmark to edit it.` }] };
       }
 
-      const tagsArr = Array.isArray(tags) ? tags.map(String) : [];
+      const tagsArr = Array.isArray(tags) ? tags.filter((tag) => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean) : [];
       const { data, error } = await withTimeout(
         supabase.from("bookmarks").insert({
           user_id: uid, device_id: deviceId,
-          url, title: title ?? url,
+          url, title: typeof title === "string" && title.trim() ? title.trim() : url,
           description: notes ?? null,
           folder_path: folder ?? null,
-          tags: tagsArr.length ? tagsArr : null,
+          tags: tagsArr,
           source: "mcp",
-          description_pending: !notes,
+          description_pending: false,
         }).select("id, title, url").single()
       );
       if (error) return { content: [{ type: "text", text: `❌ Failed to save: ${error.message}` }] };
@@ -131,7 +133,7 @@ function createBookarMcpServer(userId, deviceId) {
       const { data, error } = await withTimeout(
         supabase.from("bookmarks")
           .select("id, title, url, description, tags, folder_path, created_at, updated_at")
-          .eq("id", id).eq("user_id", uid).single()
+          .eq("id", id).eq("user_id", uid).is("deleted_at", null).single()
       );
       if (error || !data) return { content: [{ type: "text", text: "❌ Bookmark not found." }] };
       return {
@@ -170,10 +172,12 @@ function createBookarMcpServer(userId, deviceId) {
       if (Object.keys(patch).length === 0)
         return { content: [{ type: "text", text: "❌ Nothing to update — provide title, notes, folder, or tags." }] };
       patch.updated_at = new Date().toISOString();
-      const { error } = await withTimeout(
+      const { data, error } = await withTimeout(
         supabase.from("bookmarks").update(patch).eq("id", id).eq("user_id", uid)
+          .is("deleted_at", null).select("id").maybeSingle()
       );
       if (error) return { content: [{ type: "text", text: `❌ Update failed: ${error.message}` }] };
+      if (!data) return { content: [{ type: "text", text: "❌ Active bookmark not found." }] };
       return { content: [{ type: "text", text: `✅ Bookmark \`${id}\` updated.` }] };
     }
   );
@@ -184,10 +188,12 @@ function createBookarMcpServer(userId, deviceId) {
     { id: { type: "string", description: "Bookmark UUID to delete" } },
     async ({ id }) => {
       if (!id) return { content: [{ type: "text", text: "❌ `id` is required." }] };
-      const { error } = await withTimeout(
+      const { data, error } = await withTimeout(
         supabase.from("bookmarks").update({ deleted_at: new Date().toISOString() }).eq("id", id).eq("user_id", uid)
+          .is("deleted_at", null).select("id").maybeSingle()
       );
       if (error) return { content: [{ type: "text", text: `❌ Delete failed: ${error.message}` }] };
+      if (!data) return { content: [{ type: "text", text: "❌ Active bookmark not found." }] };
       return { content: [{ type: "text", text: `🗑 Bookmark \`${id}\` moved to trash. Use restore_bookmark to undo.` }] };
     }
   );
@@ -198,12 +204,13 @@ function createBookarMcpServer(userId, deviceId) {
     { id: { type: "string", description: "Bookmark UUID to restore" } },
     async ({ id }) => {
       if (!id) return { content: [{ type: "text", text: "❌ `id` is required." }] };
-      const { error } = await withTimeout(
+      const { data, error } = await withTimeout(
         supabase.from("bookmarks")
           .update({ deleted_at: null, updated_at: new Date().toISOString() })
-          .eq("id", id).eq("user_id", uid)
+          .eq("id", id).eq("user_id", uid).select("id").maybeSingle()
       );
       if (error) return { content: [{ type: "text", text: `❌ Restore failed: ${error.message}` }] };
+      if (!data) return { content: [{ type: "text", text: "❌ Bookmark not found." }] };
       return { content: [{ type: "text", text: `✅ Bookmark \`${id}\` restored.` }] };
     }
   );
@@ -214,12 +221,13 @@ function createBookarMcpServer(userId, deviceId) {
     { id: { type: "string", description: "Bookmark UUID to archive" } },
     async ({ id }) => {
       if (!id) return { content: [{ type: "text", text: "❌ `id` is required." }] };
-      const { error } = await withTimeout(
+      const { data, error } = await withTimeout(
         supabase.from("bookmarks")
           .update({ folder_path: "_archive", updated_at: new Date().toISOString() })
-          .eq("id", id).eq("user_id", uid)
+          .eq("id", id).eq("user_id", uid).is("deleted_at", null).select("id").maybeSingle()
       );
       if (error) return { content: [{ type: "text", text: `❌ Archive failed: ${error.message}` }] };
+      if (!data) return { content: [{ type: "text", text: "❌ Active bookmark not found." }] };
       return { content: [{ type: "text", text: `📦 Bookmark \`${id}\` archived.` }] };
     }
   );
@@ -245,10 +253,14 @@ function createBookarMcpServer(userId, deviceId) {
 
       try {
         if (query) {
-          results = await searchBookmarks(supabase, uid, query, { limit: maxResults, withTimeout });
-          // Apply post-search structural filters
-          if (folder) results = results.filter((b) => b.folder_path === folder);
-          if (tag) results = results.filter((b) => Array.isArray(b.tags) && b.tags.includes(tag));
+          results = await searchBookmarks(supabase, uid, query, {
+            limit: maxResults,
+            withTimeout,
+            folder,
+            tag,
+            saved_after,
+            saved_before,
+          });
         } else {
           // No query — fetch recent, with optional filters
           let q = supabase.from("bookmarks")
@@ -574,83 +586,93 @@ function createBookarMcpServer(userId, deviceId) {
 }
 
 // ── HTTP server ───────────────────────────────────────────────────────────────
-const httpServer = http.createServer(async (req, res) => {
+async function handleHttpRequest(req, res) {
   const setCors = () => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Session-Id, X-Api-Key");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   };
 
-  // Health / warmup (no auth)
-  if (req.url === "/health" || req.url === "/api/mcp/health") {
-    setCors();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0" }));
-    return;
-  }
-
-  // Warmup GET with no auth — AI platforms probe the server
-  const urlObj = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-  if (req.method === "GET" && !req.headers["authorization"] && !urlObj.searchParams.get("api_key")) {
-    setCors();
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0", auth: "required", tools: 14 }));
-    return;
-  }
-
-  const isMcpRoute = req.url === "/api/mcp" || req.url === "/mcp" ||
-    req.url?.startsWith("/api/mcp?") || req.url?.startsWith("/api/mcp/");
-  if (!isMcpRoute) {
-    res.writeHead(404);
-    res.end();
-    return;
-  }
-
   setCors();
-  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-
-  // Extract API key
-  const authHeader = req.headers["authorization"] ?? "";
-  let rawKey = authHeader.replace(/^Bearer\s+/i, "").trim();
-  if (!rawKey) rawKey = urlObj.searchParams.get("api_key") || urlObj.searchParams.get("key") || "";
-  if (!rawKey) {
-    const pathMatch = urlObj.pathname.match(/^\/api\/mcp\/([^\/]+)/);
-    if (pathMatch && pathMatch[1] !== "health") rawKey = pathMatch[1];
-  }
-
-  if (!rawKey) {
-    res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Missing API key. Pass as Authorization: Bearer <key> or ?api_key=<key>" }));
-    return;
-  }
-
-  const device = await verifyKey(rawKey);
-  if (!device) {
-    res.writeHead(401, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ error: "Invalid or revoked API key" }));
-    return;
-  }
-
-  const mcpServer = createBookarMcpServer(device.user_id, device.id);
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomBytes(16).toString("hex"),
-    enableJsonResponse: true,
-  });
 
   try {
-    await mcpServer.connect(transport);
-    await transport.handleRequest(req, res);
+    const urlObj = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  // Health / warmup (no auth)
+    if (urlObj.pathname === "/health" || urlObj.pathname === "/api/mcp/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0" }));
+      return;
+    }
+
+    const isMcpRoute = urlObj.pathname === "/api/mcp" || urlObj.pathname === "/mcp";
+    if (!isMcpRoute) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+
+    // AI platforms probe the endpoint before attempting authenticated requests.
+    if (req.method === "GET" && !req.headers.authorization && !urlObj.searchParams.get("api_key")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0", auth: "required", tools: 14 }));
+      return;
+    }
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    const authHeader = req.headers.authorization ?? "";
+    const rawKey = authHeader.replace(/^Bearer\s+/i, "").trim()
+      || urlObj.searchParams.get("api_key")
+      || urlObj.searchParams.get("key")
+      || "";
+
+    if (!rawKey) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Missing API key. Pass as Authorization: Bearer <key> or ?api_key=<key>" }));
+      return;
+    }
+
+    const device = await verifyKey(rawKey);
+    if (!device) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid or revoked API key" }));
+      return;
+    }
+
+    const mcpServer = createBookarMcpServer(device.user_id, device.id);
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+
+    try {
+      await mcpServer.connect(transport);
+      await transport.handleRequest(req, res);
+    } finally {
+      await transport.close().catch(() => {});
+    }
   } catch (err) {
-    console.error("MCP transport error:", err);
+    console.error("MCP request failed:", err);
     if (!res.headersSent) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Internal server error" }));
+    } else if (!res.writableEnded) {
+      res.end();
     }
   }
-});
+}
 
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Bookar MCP v2 listening on :${PORT}`);
-  console.log(`   Endpoint: http://localhost:${PORT}/api/mcp`);
-  console.log(`   Tools: 14 (intent-aware search engine active)`);
-});
+module.exports = handleHttpRequest;
+
+if (require.main === module) {
+  http.createServer(handleHttpRequest).listen(PORT, () => {
+    console.log(`Bookar MCP v2 listening on :${PORT}`);
+    console.log(`Endpoint: http://localhost:${PORT}/api/mcp`);
+    console.log("Tools: 14 (intent-aware search engine active)");
+  });
+}
