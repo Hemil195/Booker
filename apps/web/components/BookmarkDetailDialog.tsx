@@ -16,6 +16,7 @@ import {
   TagIcon,
   SparklesIcon,
   GlobeIcon,
+  RefreshCwIcon,
 } from "lucide-react";
 import {
   Dialog,
@@ -33,6 +34,8 @@ interface BookmarkDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (id: string) => void;
+  onRegenerate?: (bookmark: BookmarkWithDevice) => void;
+  isRegenerating?: boolean;
 }
 
 export function BookmarkDetailDialog({
@@ -40,6 +43,8 @@ export function BookmarkDetailDialog({
   open,
   onOpenChange,
   onDelete,
+  onRegenerate,
+  isRegenerating = false,
 }: BookmarkDetailDialogProps) {
   const [copied, setCopied] = useState(false);
 
@@ -161,7 +166,24 @@ export function BookmarkDetailDialog({
         <div className="mb-4">
           <div className="flex items-center gap-1.5 text-xs font-medium mb-1.5" style={{ color: "var(--bk-text-muted)" }}>
             <SparklesIcon className="w-3.5 h-3.5" style={{ color: "var(--bk-text-primary)" }} />
-            AI Summary & Description
+            <span>AI Summary & Description</span>
+            {onRegenerate && (
+              <button
+                type="button"
+                onClick={() => onRegenerate(bookmark)}
+                disabled={isRegenerating || bookmark.description_pending}
+                title="Regenerate summary"
+                aria-label="Regenerate summary"
+                className="ml-auto flex h-7 w-7 items-center justify-center rounded-[6px] border transition-bk disabled:cursor-not-allowed disabled:opacity-50"
+                style={{
+                  borderColor: "var(--bk-border)",
+                  color: "var(--bk-text-muted)",
+                  background: "var(--bk-bg)",
+                }}
+              >
+                <RefreshCwIcon className={`h-3.5 w-3.5${isRegenerating ? " animate-spin" : ""}`} />
+              </button>
+            )}
           </div>
           <div
             className="p-3.5 rounded-[10px] text-xs leading-relaxed"

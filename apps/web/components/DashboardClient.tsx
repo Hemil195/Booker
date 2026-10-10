@@ -674,6 +674,8 @@ export function DashboardClient({
         open={!!detailBookmark}
         onOpenChange={(open) => !open && setDetailBookmark(null)}
         onDelete={handleDelete}
+        onRegenerate={handleRegenerate}
+        isRegenerating={detailBookmark ? regeneratingIds.has(detailBookmark.id) : false}
       />
 
       <FolderChangeDialog

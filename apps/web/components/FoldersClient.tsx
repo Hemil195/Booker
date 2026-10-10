@@ -493,7 +493,7 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
 
       {/* VIEW 1: Grid of Folder Cards (when no folder is open) */}
       {!activeFolder && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {folderEntries.map(([folderName, items]) => (
             <div
               key={folderName}
@@ -525,15 +525,18 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
                   boxShadow: "var(--bk-shadow-card)",
                 }}
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex min-w-0 items-center gap-3">
                   <div
-                    className="w-10 h-10 rounded-[10px] flex items-center justify-center transition-bk group-hover:scale-105"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[10px] transition-bk group-hover:scale-105"
                     style={{ background: "var(--bk-selection)" }}
                   >
-                    <FolderIcon className="w-5 h-5" style={{ color: "var(--bk-text-primary)" }} />
+                    <FolderIcon className="h-6 w-6" strokeWidth={2.5} style={{ color: "var(--bk-accent)" }} />
                   </div>
+                  <h3 className="min-w-0 flex-1 truncate text-base font-bold" style={{ color: "var(--bk-text-primary)" }}>
+                    {folderName}
+                  </h3>
                   <span
-                    className="bk-pill"
+                    className="bk-pill shrink-0"
                     style={{
                       background: "rgba(255,255,255,0.06)",
                       color: "var(--bk-text-muted)",
@@ -544,13 +547,6 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
                   </span>
                 </div>
 
-                <h3 className="text-base font-semibold truncate" style={{ color: "var(--bk-text-primary)" }}>
-                  {folderName}
-                </h3>
-
-                <p className="text-xs mt-1.5 truncate" style={{ color: "var(--bk-text-muted)" }}>
-                  {items.length > 0 ? items[0].title || items[0].url : "Empty folder"}
-                </p>
               </div>
             </div>
           ))}
@@ -694,6 +690,8 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
         open={!!detailBookmark}
         onOpenChange={(open) => !open && setDetailBookmark(null)}
         onDelete={handleDelete}
+        onRegenerate={handleRegenerate}
+        isRegenerating={detailBookmark ? regeneratingIds.has(detailBookmark.id) : false}
       />
 
       <FolderChangeDialog
