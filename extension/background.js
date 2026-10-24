@@ -306,7 +306,28 @@ async function applyDashboardChanges(changes) {
   }
 }
 
+let syncWebToBrowserPromise = null;
+let lastWebSyncStartedAt = 0;
+
 async function syncWebToBrowser() {
+  if (syncWebToBrowserPromise) return syncWebToBrowserPromise;
+
+  const waitMs = Math.max(0, 2000 - (Date.now() - lastWebSyncStartedAt));
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+
+  if (syncWebToBrowserPromise) return syncWebToBrowserPromise;
+  lastWebSyncStartedAt = Date.now();
+  syncWebToBrowserPromise = performWebToBrowserSync();
+  try {
+    await syncWebToBrowserPromise;
+  } finally {
+    syncWebToBrowserPromise = null;
+  }
+}
+
+async function performWebToBrowserSync() {
   const apiKey = await getApiKey();
   if (!apiKey) return;
   const apiBase = await getApiBase();

@@ -163,6 +163,9 @@ function RevealKey({ rawKey }: { rawKey: string }) {
 
 export function ConnectionsClient({ userId, allDevices: initialDevices }: ConnectionsClientProps) {
   const [devicesList, setDevicesList] = useState<DeviceItem[]>(initialDevices);
+  const [showLinkingCode, setShowLinkingCode] = useState(
+    () => !initialDevices.some((device) => device.browser !== "bot"),
+  );
   const [generatingKey, setGeneratingKey] = useState(false);
   const [revokingDevice, setRevokingDevice] = useState(false);
   const [revokeError, setRevokeError] = useState<string | null>(null);
@@ -265,16 +268,36 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
               </p>
             </div>
           </div>
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-[6px]" style={{ background: "var(--bk-selection)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}>
-            {browserDevices.length} Connected
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-[6px]" style={{ background: "var(--bk-selection)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}>
+              {browserDevices.length} Connected
+            </span>
+            <button
+              onClick={() => setShowLinkingCode((visible) => !visible)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-[8px] text-xs font-semibold transition-bk"
+              style={{ background: "var(--bk-accent)", color: "#09090b" }}
+            >
+              {showLinkingCode ? "Cancel" : (
+                <>
+                  <PlusIcon className="w-3.5 h-3.5" />
+                  Add browser
+                </>
+              )}
+            </button>
+          </div>
         </div>
+
+        {showLinkingCode && (
+          <div className="mb-4">
+            <LinkingCodeCard userId={userId} onLinked={() => window.location.reload()} compact />
+          </div>
+        )}
 
         {browserDevices.length === 0 ? (
           <div className="py-6 text-center rounded-[10px]" style={{ border: "1px dashed var(--bk-border)" }}>
             <LaptopIcon className="w-6 h-6 mx-auto mb-2" style={{ color: "var(--bk-text-muted)" }} />
             <p className="text-xs" style={{ color: "var(--bk-text-muted)" }}>
-              No browser extensions connected yet. Use the linking code below to connect your browser.
+              No browser extensions connected yet. Use the linking code above to connect your browser.
             </p>
           </div>
         ) : (
@@ -327,10 +350,6 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
           </div>
         )}
       </div>
-
-      {browserDevices.length === 0 && (
-        <LinkingCodeCard userId={userId} onLinked={() => window.location.reload()} compact />
-      )}
 
       {/* ── SECTION 2: MCP Server URL ─────────────────────────────────────── */}
       <div className="bk-card p-5" style={{ border: "1px solid var(--bk-border)" }}>
