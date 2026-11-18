@@ -15,6 +15,7 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronUpIcon,
+  TrendingUpIcon,
   XIcon,
 } from "lucide-react";
 import {
@@ -31,7 +32,7 @@ import { AddBookmarkDialog } from "@/components/AddBookmarkDialog";
 import { BookmarkDetailDialog } from "@/components/BookmarkDetailDialog";
 import { FolderChangeDialog } from "@/components/FolderChangeDialog";
 
-type FilterTab = "all" | "recent" | "bot";
+type FilterTab = "all" | "recent" | "bot" | "popular";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -320,6 +321,7 @@ export function DashboardClient({
   const tabs: { id: FilterTab; label: string; icon: React.ReactNode }[] = [
     { id: "all", label: "View all", icon: <BookmarkIcon className="w-3.5 h-3.5" /> },
     { id: "recent", label: "Recently added", icon: <ClockIcon className="w-3.5 h-3.5" /> },
+    { id: "popular", label: "Most visited", icon: <TrendingUpIcon className="w-3.5 h-3.5" /> },
     { id: "bot", label: "Bot-added", icon: <BotIcon className="w-3.5 h-3.5" /> },
   ];
 
@@ -427,6 +429,16 @@ export function DashboardClient({
                   >
                     Clear search query
                   </button>
+                </div>
+              ) : activeTab === "popular" ? (
+                <div className="col-span-full py-12 text-center">
+                  <TrendingUpIcon className="mx-auto mb-3 h-6 w-6" style={{ color: "var(--bk-text-muted)" }} />
+                  <p className="text-sm font-medium" style={{ color: "var(--bk-text-primary)" }}>
+                    No bookmark visits tracked yet
+                  </p>
+                  <p className="mt-1 text-xs" style={{ color: "var(--bk-text-muted)" }}>
+                    Reload the Bookar extension, allow history access, and visit saved bookmarks.
+                  </p>
                 </div>
               ) : (
                 <NoBookmarksState onAddBookmark={() => setAddDialogOpen(true)} />

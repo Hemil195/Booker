@@ -6,6 +6,7 @@ import Link from "next/link";
 
 const NAV = [
   { id: "what-is-bookar", label: "What is Bookar?" },
+  { id: "how-it-works", label: "How Bookar works" },
   { id: "browser-extension", label: "Browser Extension" },
   { id: "dashboard", label: "Using the Dashboard" },
   { id: "ai-descriptions", label: "AI Descriptions" },
@@ -146,7 +147,7 @@ export default function DocsPage() {
 
           <Heading id="what-is-bookar">What is Bookar?</Heading>
           <P>
-            Bookar syncs bookmarks from Chrome, Brave, and Edge into your personal Supabase library. Use the dashboard to search and organize them, regenerate AI summaries when needed, and connect AI clients through the 14-tool MCP endpoint at <Code>/api/mcp</Code>. A standalone MCP server is also available for separate deployment.
+            Bookar keeps your saved links in one searchable library. It can copy bookmarks between Chrome, Brave, and Edge and your Bookar dashboard, create short AI summaries when you ask, and optionally connect to AI assistants. That connection uses the Model Context Protocol (MCP), a standard way for an assistant to ask Bookar to search or manage your bookmarks.
           </P>
           <P>
             Existing browser bookmarks are imported when you link the extension. New bookmarks keep their browser folder paths; when a new bookmark arrives in a generic browser folder, Bookar can use your saved bookmark patterns to suggest a matching folder.
@@ -155,9 +156,22 @@ export default function DocsPage() {
             AI summaries are generated on demand from a bookmark&apos;s menu or from Settings. They are not automatically generated for every synced bookmark.
           </Note>
 
+          <Heading id="how-it-works">How Bookar works</Heading>
+          <ol style={{ paddingLeft: 20, marginBottom: 20 }}>
+            {[
+              "Sign in to your Bookar website with Google.",
+              "Open Connections & AI to see a linking code, then enter it in the Bookar browser extension. The extension imports bookmarks already in that browser.",
+              "Use the dashboard to search, create folders, move bookmarks, and share selected links.",
+              "Browser bookmark changes are sent to Bookar as they happen. Changes made in the dashboard are checked by the extension about once a minute; choose Sync Now in the extension to check sooner.",
+              "Optionally create an AI key in Connections & AI to connect an assistant. Keep the key private; you can revoke it from the same page.",
+            ].map((step, i) => (
+              <li key={i} style={{ fontSize: 14, color: "var(--bk-text-muted)", lineHeight: 1.7, marginBottom: 6 }}>{step}</li>
+            ))}
+          </ol>
+
           <Heading id="browser-extension">Browser Extension</Heading>
           <P>
-            The Bookar browser extension runs as a Manifest V3 service worker in Chromium-based browsers (Chrome, Brave, Edge). It listens to your browser&apos;s bookmark events and syncs any changes to your Bookar account in real time.
+            The Bookar browser extension runs in Chrome, Brave, and Edge. It watches for bookmark changes and sends them to your Bookar account. For visit counts, it also needs the browser&apos;s history permission, but it only records a visit when the exact page address is already bookmarked in that browser. It does not import general or past browsing history.
           </P>
 
           <P><strong style={{ color: "var(--bk-text-primary)" }}>Installing the extension (Load Unpacked)</strong></P>
@@ -197,6 +211,7 @@ export default function DocsPage() {
               "Drag and drop — move bookmarks directly onto a folder card",
               "Share selected — copies a formatted list of selected bookmarks to your clipboard",
               "Quick add — add a bookmark from the header and choose its destination folder",
+              "Most visited — see which saved links you open most often (requires the extension's history permission)",
             ].map((item, i) => (
               <li key={i} style={{ fontSize: 14, color: "var(--bk-text-muted)", lineHeight: 1.7, marginBottom: 6 }}>{item}</li>
             ))}
@@ -239,6 +254,9 @@ export default function DocsPage() {
           <P>
             Generate an API key on the Connections & AI page, then copy the ChatGPT Connector URL shown there. The URL includes the key as an <Code>api_key</Code> query parameter.
           </P>
+          <Note>
+            The connector URL acts like a password because it contains your API key. Do not share it. You can revoke the key from Bookar&apos;s Connections & AI page.
+          </Note>
           <ol style={{ paddingLeft: 20, marginBottom: 16 }}>
             {[
               "Open ChatGPT → Settings → Developer Mode → Enable.",

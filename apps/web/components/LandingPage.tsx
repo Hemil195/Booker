@@ -587,7 +587,7 @@ const ROADMAP = [
   {
     num: "03", status: "LIVE", color: "#38bdf8",
     title: "MCP bookmark tools",
-    bullets: ["14 tools for search, organization, and insights", "Connect Claude, ChatGPT, Cursor, and other MCP clients", "Web endpoint plus optional standalone server"],
+    bullets: ["15 tools for search, organization, and insights", "Connect Claude, ChatGPT, Cursor, and other MCP clients", "Web endpoint plus optional standalone server"],
   },
   {
     num: "04", status: "PLANNED", color: "#a855f7",

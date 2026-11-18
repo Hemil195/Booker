@@ -1,5 +1,10 @@
 # Bookar — Complete Build Specification
 
+> **Historical planning document:** this file describes an earlier proposed design and is not a
+> reliable description of every feature in the current app. For the current setup, see the
+> [project README](README.md), [deployment guide](DEPLOYMENT.md), and the user guide at
+> [`apps/web/app/docs/page.tsx`](apps/web/app/docs/page.tsx).
+
 > Cross-browser bookmark sync platform that auto-describes bookmarks via LLM and exposes them to AI bots (Claude via MCP, ChatGPT via REST/OpenAPI) so they can suggest tools from the user's own saved bookmarks.
 
 Personal project first, free forever unless it gets real traction. Part of the [[rereal-ecosystem]].

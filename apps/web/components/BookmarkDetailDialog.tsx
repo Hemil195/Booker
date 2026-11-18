@@ -259,6 +259,29 @@ export function BookmarkDetailDialog({
             </span>
           </div>
 
+          <div className="min-w-0">
+            <span style={{ color: "var(--bk-text-muted)" }} className="block mb-0.5">
+              <ClockIcon className="w-3 h-3 inline mr-1" /> Last Visited
+            </span>
+            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium break-words">
+              {bookmark.last_visited_at
+                ? new Date(bookmark.last_visited_at).toLocaleString("en-US", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })
+                : "Not tracked yet"}
+            </span>
+          </div>
+
+          <div className="min-w-0">
+            <span style={{ color: "var(--bk-text-muted)" }} className="block mb-0.5">
+              Visits
+            </span>
+            <span style={{ color: "var(--bk-text-primary)" }} className="font-medium break-words">
+              {bookmark.visit_count}
+            </span>
+          </div>
+
           <div>
             <span style={{ color: "var(--bk-text-muted)" }} className="block mb-0.5">
               ID

@@ -486,3 +486,35 @@ chrome.bookmarks.onRemoved.addListener(async (id, removeInfo) => {
     url: removeInfo.node.url,
   });
 });
+
+chrome.history.onVisited.addListener(async (historyItem) => {
+  const url = historyItem.url;
+  if (!url || (!url.startsWith("http://") && !url.startsWith("https://"))) return;
+
+  try {
+    const matchingBookmarks = await chrome.bookmarks.search({ url });
+    if (!matchingBookmarks.some((bookmark) => bookmark.url === url)) return;
+
+    const apiKey = await getApiKey();
+    if (!apiKey) return;
+
+    const apiBase = await getApiBase();
+    const response = await fetch(`${apiBase}/api/track-bookmark-visit`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url,
+        visited_at: new Date(historyItem.lastVisitTime ?? Date.now()).toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn(`Bookar: Failed to record bookmark visit (${response.status}).`);
+    }
+  } catch (error) {
+    console.warn("Bookar: Bookmark visit tracking failed:", error);
+  }
+});

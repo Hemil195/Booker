@@ -1,6 +1,6 @@
 // apps/mcp-server/index.js
 // Bookar MCP Server v2 — Bookmark Intelligence Layer
-// 14 intent-aware tools. Streamable HTTP transport.
+// 15 intent-aware tools. Streamable HTTP transport.
 // Auth: Bearer API key or ?api_key= query param.
 
 require("dotenv").config({ path: ".env.local" });
@@ -371,6 +371,34 @@ function createBookarMcpServer(userId, deviceId) {
   // ── Layer 3: Analysis ──────────────────────────────────────────────────────
 
   server.tool(
+    "most_visited",
+    "List the user's most frequently visited bookmarks, including visit counts and last-visited dates. " +
+    "Use when asked which saved links they use most or when they last visited a bookmark.",
+    { limit: { type: "number", description: "Maximum results (default 10, max 50)" } },
+    async ({ limit }) => {
+      const max = Math.max(1, Math.min(Math.floor(Number(limit) || 10), 50));
+      const { data, error } = await withTimeout(
+        supabase.from("bookmarks")
+          .select("title, url, folder_path, visit_count, last_visited_at")
+          .eq("user_id", uid).is("deleted_at", null).gt("visit_count", 0)
+          .order("visit_count", { ascending: false })
+          .order("last_visited_at", { ascending: false, nullsFirst: false })
+          .limit(max)
+      );
+      if (error) return { content: [{ type: "text", text: `❌ Failed to load visit statistics: ${error.message}` }] };
+      if (!data?.length) {
+        return { content: [{ type: "text", text: "No bookmark visits have been tracked yet. Install or reload the Bookar browser extension and visit a saved bookmark." }] };
+      }
+      const lines = data.map((bookmark, index) =>
+        `${index + 1}. **${bookmark.title ?? bookmark.url}** — ${bookmark.visit_count} visit(s)` +
+        `${bookmark.last_visited_at ? `; last visited ${new Date(bookmark.last_visited_at).toLocaleString()}` : ""}` +
+        `\n   ${bookmark.url}${bookmark.folder_path ? `\n   Folder: ${bookmark.folder_path}` : ""}`
+      );
+      return { content: [{ type: "text", text: `🔥 **Most Visited Bookmarks** (top ${data.length}):\n\n${lines.join("\n\n")}` }] };
+    }
+  );
+
+  server.tool(
     "workspace_stats",
     "Get library health overview: total bookmarks, folders, tags, duplicates, top tags, oldest unsorted. " +
     "Use when user asks 'how many bookmarks do I have?' or wants a summary.",
@@ -615,7 +643,7 @@ async function handleHttpRequest(req, res) {
     // AI platforms probe the endpoint before attempting authenticated requests.
     if (req.method === "GET" && !req.headers.authorization && !urlObj.searchParams.get("api_key")) {
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0", auth: "required", tools: 14 }));
+      res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0", auth: "required", tools: 15 }));
       return;
     }
 
@@ -673,6 +701,6 @@ if (require.main === module) {
   http.createServer(handleHttpRequest).listen(PORT, () => {
     console.log(`Bookar MCP v2 listening on :${PORT}`);
     console.log(`Endpoint: http://localhost:${PORT}/api/mcp`);
-    console.log("Tools: 14 (intent-aware search engine active)");
+    console.log("Tools: 15 (intent-aware search engine active)");
   });
 }

@@ -1,6 +1,6 @@
 // apps/web/app/api/mcp/route.ts
 // Bookar — Bookmark Intelligence MCP (Model Context Protocol) server.
-// 14 intent-shaped tools across 4 intelligence layers.
+// 15 intent-shaped tools across 4 intelligence layers.
 // Auth: Bearer API key in Authorization header OR ?api_key= query param.
 //
 // RELIABILITY: Supabase admin client is created at module level so Vercel
@@ -445,6 +445,18 @@ const TOOLS = [
 
   // ── Layer 3: Analysis ──────────────────────────────────────────────────────
   {
+    name: "most_visited",
+    description:
+      "List the user's most frequently visited bookmarks, including visit counts and last-visited dates. " +
+      "Use when asked which saved links they use most or when they last visited a bookmark.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", description: "Maximum results (default 10, max 50)" },
+      },
+    },
+  },
+  {
     name: "workspace_stats",
     description:
       "Get a complete health overview of the user's bookmark workspace: total count, folder count, tag count, duplicate count, top tags, and oldest unsorted bookmark. " +
@@ -862,6 +874,35 @@ async function executeTool(
     ].join("\n");
   }
 
+  // ── most_visited ───────────────────────────────────────────────────────────
+  if (name === "most_visited") {
+    const requestedLimit = Number(args.limit) || 10;
+    const limit = Math.max(1, Math.min(Math.floor(requestedLimit), 50));
+    const { data, error } = await withTimeout(
+      db
+        .from("bookmarks")
+        .select("title, url, folder_path, visit_count, last_visited_at")
+        .eq("user_id", uid)
+        .is("deleted_at", null)
+        .gt("visit_count", 0)
+        .order("visit_count", { ascending: false })
+        .order("last_visited_at", { ascending: false, nullsFirst: false })
+        .limit(limit),
+    );
+    if (error) return `❌ Failed to load visit statistics: ${error.message}`;
+    if (!data?.length) {
+      return "No bookmark visits have been tracked yet. Install or reload the Bookar browser extension and visit a saved bookmark.";
+    }
+    return [
+      `🔥 **Most Visited Bookmarks** (top ${data.length})`,
+      ...data.map((bookmark, index) =>
+        `${index + 1}. **${bookmark.title ?? bookmark.url}** — ${bookmark.visit_count} visit(s)` +
+        `${bookmark.last_visited_at ? `; last visited ${new Date(bookmark.last_visited_at).toLocaleString()}` : ""}` +
+        `\n   ${bookmark.url}${bookmark.folder_path ? `\n   Folder: ${bookmark.folder_path}` : ""}`,
+      ),
+    ].join("\n");
+  }
+
   // ── find_duplicates ────────────────────────────────────────────────────────
   if (name === "find_duplicates") {
     const limit = Math.min(Number(args.limit) || 10, 50);
@@ -1082,7 +1123,7 @@ const SERVER_INFO = {
   name: "bookar",
   version: "2.0.0",
   description:
-    "Bookar Bookmark Intelligence — your personal knowledge base. Save, organise, find, and reason over your bookmarks using 14 intent-shaped tools.",
+    "Bookar Bookmark Intelligence — your personal knowledge base. Save, organise, find, and reason over your bookmarks using 15 intent-shaped tools.",
   protocolVersion: "2024-11-05",
   capabilities: { tools: {} },
 };

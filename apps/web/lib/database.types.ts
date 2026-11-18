@@ -45,6 +45,8 @@ export interface Database {
           browser_bookmark_id: string | null;
           source: "browser" | "bot";
           description_pending: boolean;
+          last_visited_at: string | null;
+          visit_count: number;
           created_at: string;
           updated_at: string;
           deleted_at: string | null;
@@ -61,6 +63,8 @@ export interface Database {
           browser_bookmark_id?: string | null;
           source?: "browser" | "bot";
           description_pending?: boolean;
+          last_visited_at?: string | null;
+          visit_count?: number;
           created_at?: string;
           updated_at?: string;
           deleted_at?: string | null;
@@ -69,7 +73,16 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      record_bookmark_visit: {
+        Args: {
+          p_user_id: string;
+          p_url: string;
+          p_visited_at: string;
+        };
+        Returns: number;
+      };
+    };
     Enums: Record<string, never>;
   };
 }

@@ -13,7 +13,7 @@ This guide details the complete production deployment flow for **Bookar**:
 ### Step 1: Database Schema & Realtime Setup
 1. Log in to your [Supabase Dashboard](https://supabase.com/dashboard) and open your project (or create a new project).
 2. Open the **SQL Editor** tab from the left sidebar.
-3. Run the migrations in order in the SQL Editor: [`0001_init.sql`](supabase/migrations/0001_init.sql), then [`0002_add_unique_bookmark_constraint.sql`](supabase/migrations/0002_add_unique_bookmark_constraint.sql).
+3. Run the migrations in order in the SQL Editor: [`0001_init.sql`](supabase/migrations/0001_init.sql), [`0002_add_unique_bookmark_constraint.sql`](supabase/migrations/0002_add_unique_bookmark_constraint.sql), then [`0003_add_bookmark_visit_tracking.sql`](supabase/migrations/0003_add_bookmark_visit_tracking.sql).
 4. Go to **Database** $\rightarrow$ **Publications** $\rightarrow$ Click `supabase_realtime` and ensure the `bookmarks` table is enabled for Realtime events.
 
 ### Step 2: Authentication & Redirect URLs
@@ -95,19 +95,25 @@ Generate an API Key from your Bookar Dashboard (**Connections & AI** tab), then 
 ```
 
 ### Connecting ChatGPT (Plus / Pro / Enterprise)
-1. Open ChatGPT $\rightarrow$ Settings $\rightarrow$ Developer Mode $\rightarrow$ Enable.
-2. Go to **Connectors** $\rightarrow$ **Create New Connector**.
-3. Set **Server URL**: `https://your-mcp-domain.vercel.app/api/mcp`
-4. Set **Authentication**: **API Key**.
-5. Paste your Bookar API Key generated from your dashboard.
+1. In Bookar **Connections & AI**, generate an API key and copy the ChatGPT Connector URL shown.
+   The copied URL contains the key.
+2. In ChatGPT, open **Settings → Developer Mode → Enable**.
+3. Open **Connectors → Create Connector** and paste the copied URL.
+4. Set authentication to **No Auth** (sometimes shown as **None**) and save.
+
+Treat the full connector URL like a password because it contains your API key. You can revoke the
+key from Bookar's Connections & AI page. If you deploy the standalone MCP server, use its
+`/api/mcp` address in place of the web app's address while keeping the `api_key` query parameter.
 
 ---
 
 ## 4. Browser Extension Deployment & Publishing
 
-### Step 1: Update API Base Endpoint
-In [`extension/background.js`](extension/background.js) and [`extension/popup.js`](extension/popup.js),
-set `API_BASE` to your production web-app URL:
+### Step 1: Package the extension
+The simplest production setup is to download the extension ZIP from the deployed Bookar website.
+The website automatically inserts its own address into the ZIP. If you load the source folder
+directly instead, set `API_BASE` in [`extension/background.js`](extension/background.js) and
+[`extension/popup.js`](extension/popup.js) to your production web-app URL:
 
 ```javascript
 const API_BASE = "https://your-app-domain.vercel.app";
@@ -116,17 +122,21 @@ const API_BASE = "https://your-app-domain.vercel.app";
 ### Step 2: Test Extension Locally
 1. Open Chrome/Brave/Edge and navigate to `chrome://extensions`.
 2. Enable **Developer Mode** toggle (top right).
-3. Click **Load unpacked** $\rightarrow$ select the `extension/` folder in your project.
+3. Click **Load unpacked** → select the downloaded/unzipped extension folder and accept its bookmark and history permissions.
 4. Open Connections & AI in the Bookar dashboard, then link the extension using the displayed 6-digit code.
 5. The first link backfills existing browser bookmarks. Existing Bookar records with matching URLs are preserved.
+
+The extension tracks visits only for URLs already bookmarked in that browser. It does not import
+past browsing history; last-visited dates and visit counts begin after the updated extension is
+installed/reloaded and migration `0003` has been applied.
 
 ---
 
 ## Summary Checklist
 
-- [ ] Run migrations `0001_init.sql` and `0002_add_unique_bookmark_constraint.sql` in order.
+- [ ] Run migrations `0001_init.sql`, `0002_add_unique_bookmark_constraint.sql`, and `0003_add_bookmark_visit_tracking.sql` in order.
 - [ ] Configure Supabase Google OAuth provider & Auth redirect URLs.
 - [ ] Deploy `apps/web` on Vercel with all production environment variables.
 - [ ] Optionally deploy `apps/mcp-server` on Vercel if you want a separate MCP service.
-- [ ] Update `API_BASE` in extension files to live Vercel domain.
-- [ ] Test linking browser extension with live dashboard.
+- [ ] Download the extension ZIP from the deployed website, or set `API_BASE` in both extension source files.
+- [ ] Test linking browser extension with live dashboard and allow its history permission for bookmarked-URL visit tracking.

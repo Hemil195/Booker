@@ -189,6 +189,24 @@ export function BookmarkRow({
             <ClockIcon style={{ width: "10px", height: "10px" }} />
             <span><strong style={{ color: "var(--bk-text-primary)" }}>Time:</strong> {relativeTime(bookmark.created_at)}</span>
           </span>
+          {bookmark.last_visited_at && (
+            <span
+              className="flex items-center gap-1"
+              title={`Last visited on ${new Date(bookmark.last_visited_at).toLocaleString("en-US")}`}
+              suppressHydrationWarning
+            >
+              <ClockIcon style={{ width: "10px", height: "10px" }} />
+              <span>
+                <strong style={{ color: "var(--bk-text-primary)" }}>Last visited:</strong>{" "}
+                {relativeTime(bookmark.last_visited_at)}
+              </span>
+            </span>
+          )}
+          {bookmark.visit_count > 0 && (
+            <span>
+              <strong style={{ color: "var(--bk-text-primary)" }}>Visits:</strong> {bookmark.visit_count}
+            </span>
+          )}
         </div>
       </div>
 
