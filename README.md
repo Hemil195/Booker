@@ -44,6 +44,22 @@ their own copy of Bookar.
 
 ## Run your own copy
 
+### Quick local start on Windows
+
+From the repository root, run:
+
+```powershell
+.\run-local.ps1
+```
+
+This opens separate terminals for the web app and the standalone MCP server:
+
+```text
+Web:    http://localhost:3000
+MCP:    http://localhost:3001/api/mcp
+Health: http://localhost:3001/health
+```
+
 ### 1. Prerequisites (outside the IDE)
 
 | What | Where |

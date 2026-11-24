@@ -12,6 +12,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { createHmac } = require("crypto");
 const http = require("http");
 const { searchBookmarks } = require("./search.js");
+const { z } = require("zod");
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -68,6 +69,39 @@ function formatBookmark(bm, index) {
 function createBookarMcpServer(userId, deviceId) {
   const server = new McpServer({ name: "bookar", version: "2.0.0" });
   const uid = userId;
+
+  // The SDK in this project requires Zod schemas. Convert the existing
+  // JSON-style parameter definitions to Zod at registration time.
+  server.tool = (name, description, paramsSchemaOrCallback, callback) => {
+    const paramsSchema =
+      typeof paramsSchemaOrCallback === "function" ? {} : (paramsSchemaOrCallback || {});
+    const toolCallback =
+      typeof paramsSchemaOrCallback === "function" ? paramsSchemaOrCallback : callback;
+
+    const shape = {};
+    for (const [key, spec] of Object.entries(paramsSchema)) {
+      let fieldSchema;
+      if (spec?.type === "number") {
+        fieldSchema = z.number();
+      } else if (spec?.type === "array") {
+        fieldSchema = z.array(z.string());
+      } else if (spec?.type === "boolean") {
+        fieldSchema = z.boolean();
+      } else {
+        fieldSchema = z.string();
+      }
+      shape[key] = fieldSchema.optional();
+    }
+
+    return server.registerTool(
+      name,
+      {
+        description,
+        inputSchema: z.object(shape),
+      },
+      toolCallback,
+    );
+  };
 
   // ── Layer 1: CRUD ──────────────────────────────────────────────────────────
 
@@ -669,6 +703,22 @@ async function handleHttpRequest(req, res) {
     if (!device) {
       res.writeHead(401, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Invalid or revoked API key" }));
+      return;
+    }
+
+    if (
+      req.method === "GET"
+      && !String(req.headers.accept || "").includes("text/event-stream")
+    ) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        status: "ok",
+        server: "bookar-mcp",
+        version: "2.0.0",
+        authenticated: true,
+        tools: 15,
+        mcpEndpoint: `/api/mcp`,
+      }));
       return;
     }
 
