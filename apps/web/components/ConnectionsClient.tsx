@@ -44,6 +44,7 @@ interface DeviceItem {
 interface ConnectionsClientProps {
   userId: string;
   allDevices: DeviceItem[];
+  mcpServerUrl?: string;
 }
 
 function CopyButton({ value, label = "Copy" }: { value: string; label?: string }) {
@@ -161,7 +162,11 @@ function RevealKey({ rawKey }: { rawKey: string }) {
   );
 }
 
-export function ConnectionsClient({ userId, allDevices: initialDevices }: ConnectionsClientProps) {
+export function ConnectionsClient({
+  userId,
+  allDevices: initialDevices,
+  mcpServerUrl,
+}: ConnectionsClientProps) {
   const [devicesList, setDevicesList] = useState<DeviceItem[]>(initialDevices);
   const [showLinkingCode, setShowLinkingCode] = useState(
     () => !initialDevices.some((device) => device.browser !== "bot"),
@@ -173,13 +178,15 @@ export function ConnectionsClient({ userId, allDevices: initialDevices }: Connec
   const [restExpanded, setRestExpanded] = useState(false);
   const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
   const [keyErrorNotice, setKeyErrorNotice] = useState<string | null>(null);
-  const [mcpUrl, setMcpUrl] = useState<string>("https://bookar-rereal.vercel.app/api/mcp");
+  const [mcpUrl, setMcpUrl] = useState<string>(
+    mcpServerUrl || "http://localhost:3000/api/mcp",
+  );
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (!mcpServerUrl && typeof window !== "undefined") {
       setMcpUrl(`${window.location.origin}/api/mcp`);
     }
-  }, []);
+  }, [mcpServerUrl]);
 
   // Split into connected browser devices and bot keys
   const browserDevices = devicesList.filter((d) => d.browser !== "bot");

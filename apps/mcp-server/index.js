@@ -651,7 +651,7 @@ function createBookarMcpServer(userId, deviceId) {
 async function handleHttpRequest(req, res) {
   const setCors = () => {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Session-Id, X-Api-Key");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, MCP-Session-Id, MCP-Protocol-Version, X-Api-Key");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   };
 
@@ -659,15 +659,40 @@ async function handleHttpRequest(req, res) {
 
   try {
     const urlObj = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    const pathname = urlObj.pathname.replace(/\/+$/, "") || "/";
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    // Claude and other MCP clients probe OAuth metadata before connecting.
+    // API-key-in-URL connectors use this server as a custom/no-auth integration,
+    // so do not advertise an OAuth authorization flow that is not implemented.
+    if (
+      pathname === "/.well-known/oauth-protected-resource"
+      || pathname === "/.well-known/oauth-protected-resource/api/mcp"
+      || pathname === "/.well-known/oauth-authorization-server"
+      || pathname === "/.well-known/openid-configuration"
+    ) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({
+        resource: `${urlObj.protocol}//${urlObj.host}/api/mcp`,
+        authorization_servers: [],
+        bearer_methods_supported: ["header", "query"],
+      }));
+      return;
+    }
 
   // Health / warmup (no auth)
-    if (urlObj.pathname === "/health" || urlObj.pathname === "/api/mcp/health") {
+    if (pathname === "/health" || pathname === "/api/mcp/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", server: "bookar-mcp", version: "2.0.0" }));
       return;
     }
 
-    const isMcpRoute = urlObj.pathname === "/api/mcp" || urlObj.pathname === "/mcp";
+    const isMcpRoute = pathname === "/api/mcp" || pathname === "/mcp";
     if (!isMcpRoute) {
       res.writeHead(404);
       res.end();
@@ -748,7 +773,7 @@ async function handleHttpRequest(req, res) {
 module.exports = handleHttpRequest;
 
 if (require.main === module) {
-  http.createServer(handleHttpRequest).listen(PORT, () => {
+  http.createServer(handleHttpRequest).listen(PORT, "0.0.0.0", () => {
     console.log(`Bookar MCP v2 listening on :${PORT}`);
     console.log(`Endpoint: http://localhost:${PORT}/api/mcp`);
     console.log("Tools: 15 (intent-aware search engine active)");

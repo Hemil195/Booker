@@ -25,6 +25,7 @@ export default async function ConnectionsPage() {
     <ConnectionsClient
       userId={user!.id}
       allDevices={devices ?? []}
+      mcpServerUrl={process.env.MCP_SERVER_URL}
     />
   );
 }
