@@ -676,12 +676,10 @@ async function handleHttpRequest(req, res) {
       || pathname === "/.well-known/oauth-authorization-server"
       || pathname === "/.well-known/openid-configuration"
     ) {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({
-        resource: `${urlObj.protocol}//${urlObj.host}/api/mcp`,
-        authorization_servers: [],
-        bearer_methods_supported: ["header", "query"],
-      }));
+      // 404 = "no OAuth here". A 200 JSON document makes Claude assume OAuth
+      // is supported and attempt dynamic client registration (/register).
+      res.writeHead(404, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "OAuth is not used; authenticate with the API key" }));
       return;
     }
 
@@ -747,10 +745,24 @@ async function handleHttpRequest(req, res) {
       return;
     }
 
+    // Stateless server: there is no standalone server->client stream and no
+    // sessions to terminate. Per the MCP Streamable HTTP spec, answer GET/DELETE
+    // with 405 instead of holding an SSE stream open forever (which makes
+    // clients such as Claude's connector hang and report "couldn't reach").
+    if (req.method !== "POST") {
+      res.writeHead(405, { "Content-Type": "application/json", Allow: "POST, OPTIONS" });
+      res.end(JSON.stringify({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Method not allowed." },
+        id: null,
+      }));
+      return;
+    }
+
     const mcpServer = createBookarMcpServer(device.user_id, device.id);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
-      enableJsonResponse: true,
+      enableJsonResponse: process.env.MCP_SSE ? false : true,
     });
 
     try {

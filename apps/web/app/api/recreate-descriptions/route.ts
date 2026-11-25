@@ -58,7 +58,7 @@ export async function POST() {
 
     await Promise.all(
       chunk.map((bookmark) =>
-        processBookmarkAiDescription(bookmark.id, bookmark.url, bookmark.title ?? undefined, bookmark.folder_path)
+        processBookmarkAiDescription(bookmark.id, bookmark.url, bookmark.title ?? undefined, bookmark.folder_path, { preserveFolder: true })
       ),
     );
   }

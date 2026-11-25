@@ -142,9 +142,15 @@ function flattenTree(nodes, results = []) {
 // ---------------------------------------------------------------------------
 function buildFolderPathMap(nodes, parentPath = "", map = {}) {
   for (const node of nodes) {
-    const path = parentPath
-      ? node.title ? `${parentPath}/${node.title}` : parentPath
-      : node.title ?? "";
+    // The tree root (id "0") and its direct children ("Bookmarks bar",
+    // "Other bookmarks", "Mobile bookmarks") are browser containers, not
+    // folders the user created, so they never become part of a folder path.
+    const isContainer = node.id === "0" || node.parentId === "0";
+    const path = isContainer
+      ? ""
+      : parentPath
+        ? node.title ? `${parentPath}/${node.title}` : parentPath
+        : node.title ?? "";
 
     if (!node.url && node.id) {
       map[node.id] = path;
@@ -178,7 +184,7 @@ async function backfillAllBookmarks() {
       browser_bookmark_id: bm.id,
       url: bm.url,
       title: bm.title,
-      folder_path: bm.parentId ? folderPathMap[bm.parentId] ?? null : null,
+      folder_path: bm.parentId ? folderPathMap[bm.parentId] || null : null,
     }));
 
     const res = await fetch(batchEndpoint, {
@@ -259,6 +265,21 @@ async function findOrCreateBrowserFolder(folderPath) {
   return parentId;
 }
 
+// Older versions stored browser root names inside paths ("Bookmarks bar/Work").
+// Treat those as the user's real folder ("Work") and a bare root as "no folder".
+const BROWSER_ROOT_NAMES = [
+  "bookmarks bar", "bookmarks toolbar", "favorites bar",
+  "other bookmarks", "other favorites", "mobile bookmarks", "mobile favorites",
+];
+function normalizeFolderPath(folderPath) {
+  if (!folderPath) return null;
+  const parts = folderPath.split("/").map((part) => part.trim()).filter(Boolean);
+  while (parts.length > 0 && BROWSER_ROOT_NAMES.includes(parts[0].toLowerCase())) {
+    parts.shift();
+  }
+  return parts.length > 0 ? parts.join("/") : null;
+}
+
 async function applyDashboardChanges(changes) {
   for (const change of changes ?? []) {
     try {
@@ -292,13 +313,16 @@ async function applyDashboardChanges(changes) {
         await chrome.bookmarks.update(bookmark.id, updatedFields);
       }
 
-      const bookmarksBarId = await getBookmarksBarId();
-      const currentFolderPath = await getFolderPath(bookmark.parentId);
-      if (change.folder_path && currentFolderPath !== change.folder_path) {
-        const parentId = await findOrCreateBrowserFolder(change.folder_path);
-        if (parentId) await chrome.bookmarks.move(bookmark.id, { parentId });
-      } else if (!change.folder_path && bookmarksBarId && bookmark.parentId !== bookmarksBarId) {
-        await chrome.bookmarks.move(bookmark.id, { parentId: bookmarksBarId });
+      // Only touch the bookmark's location when the dashboard names a real
+      // folder that differs from the browser. A bookmark with no folder in the
+      // dashboard is left exactly where it is in the browser.
+      const wantedFolderPath = normalizeFolderPath(change.folder_path);
+      if (wantedFolderPath) {
+        const currentFolderPath = await getFolderPath(bookmark.parentId);
+        if (currentFolderPath !== wantedFolderPath) {
+          const parentId = await findOrCreateBrowserFolder(wantedFolderPath);
+          if (parentId) await chrome.bookmarks.move(bookmark.id, { parentId });
+        }
       }
     } catch (err) {
       console.warn("Bookar: Failed to apply dashboard bookmark change:", err);
@@ -348,8 +372,8 @@ async function performWebToBrowserSync() {
 
     for (const bm of bookmarks ?? []) {
       try {
-        const parentId = bm.folder_path
-          ? await findOrCreateBrowserFolder(bm.folder_path)
+        const parentId = normalizeFolderPath(bm.folder_path)
+          ? await findOrCreateBrowserFolder(normalizeFolderPath(bm.folder_path))
           : await getBookmarksBarId();
         const createdNode = await chrome.bookmarks.create({
           title: bm.title || bm.url,

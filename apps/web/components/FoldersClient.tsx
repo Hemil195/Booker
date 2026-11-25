@@ -32,6 +32,7 @@ import { BookmarkDetailDialog } from "@/components/BookmarkDetailDialog";
 import { FolderChangeDialog } from "@/components/FolderChangeDialog";
 import { createSupabaseBrowserClient } from "@/lib/supabaseClient";
 import type { Bookmark } from "@/lib/database.types";
+import { normalizeBrowserFolderPath } from "@/lib/bookmarkCategory";
 
 type BookmarkRowItem = Bookmark;
 
@@ -140,7 +141,9 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
     const map = new Map<string, BookmarkRowItem[]>();
 
     bookmarks.forEach((bm) => {
-      const folder = bm.folder_path || "Uncategorized";
+      // Bookmarks with no folder are listed directly on the page (see looseBookmarks).
+      const folder = normalizeBrowserFolderPath(bm.folder_path);
+      if (!folder) return;
       if (!map.has(folder)) map.set(folder, []);
       map.get(folder)!.push(bm);
     });
@@ -152,6 +155,12 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
 
     return map;
   }, [bookmarks, customFolders]);
+
+  // Bookmarks that are not in any folder: shown directly on the Folders page.
+  const looseBookmarks = useMemo(
+    () => bookmarks.filter((bm) => !normalizeBrowserFolderPath(bm.folder_path)),
+    [bookmarks],
+  );
 
   const existingFolders = useMemo(() => {
     return Array.from(folderMap.keys()).sort();
@@ -195,9 +204,9 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
   };
 
   const activeBookmarks = useMemo(() => {
-    if (!activeFolder) return [];
+    if (!activeFolder) return looseBookmarks;
     return folderMap.get(activeFolder) || [];
-  }, [activeFolder, folderMap]);
+  }, [activeFolder, folderMap, looseBookmarks]);
 
   const allActiveSelected =
     activeBookmarks.length > 0 &&
@@ -553,6 +562,45 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
         </div>
       )}
 
+      {/* Bookmarks that are not in any folder are shown directly here */}
+      {!activeFolder && looseBookmarks.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold" style={{ color: "var(--bk-text-primary)" }}>
+            Not in a folder
+            <span className="ml-2 text-xs font-normal" style={{ color: "var(--bk-text-muted)" }}>
+              {looseBookmarks.length} bookmark{looseBookmarks.length !== 1 ? "s" : ""}
+            </span>
+          </h2>
+          <div className="bk-card p-5 space-y-[2px]" style={{ border: "1px solid var(--bk-border)" }}>
+            {looseBookmarks.map((bm, i) => (
+              <div
+                key={bm.id}
+                draggable
+                onContextMenu={(event) => openContextMenu(event, { bookmarkId: bm.id })}
+                onDragStart={(event) => {
+                  const ids = idsForBookmarkAction(bm.id);
+                  event.dataTransfer.setData("application/bookar-bookmarks", JSON.stringify(ids));
+                  event.dataTransfer.effectAllowed = "move";
+                  if (!selectedIds.has(bm.id)) setSelectedIds(new Set([bm.id]));
+                }}
+              >
+                <BookmarkRow
+                  bookmark={bm}
+                  checked={selectedIds.has(bm.id)}
+                  isSelectMode={selectedIds.size > 0}
+                  onCheckedChange={toggleSelect}
+                  onDelete={handleDelete}
+                  onRegenerate={handleRegenerate}
+                  isRegenerating={regeneratingIds.has(bm.id)}
+                  onSelect={(b) => setDetailBookmark(b)}
+                  index={i}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* VIEW 2: In-place Full Bookmark List / Table inside Opened Folder */}
       {activeFolder && (
         <div className="bk-card p-5 animate-fade-in space-y-4" style={{ border: "1px solid var(--bk-border)" }}>
@@ -728,7 +776,7 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
                 style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}
               >
                 <option value="">Choose a folder</option>
-                <option value="Uncategorized">Uncategorized</option>
+                <option value="Uncategorized">No folder (top level)</option>
                 {existingFolders.filter((folder) => folder !== "Uncategorized").map((folder) => (
                   <option key={folder} value={folder}>{folder}</option>
                 ))}

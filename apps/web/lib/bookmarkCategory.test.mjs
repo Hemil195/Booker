@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inferBookmarkFolder, isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory.ts";
+import { inferBookmarkFolder, isGenericBrowserFolder, normalizeBrowserFolderPath, normalizeCategory } from "./bookmarkCategory.ts";
 import { getKnownBookmarkMetadata } from "./knownBookmarkMetadata.ts";
 
 const cases = [
@@ -107,4 +107,13 @@ test("recognizes Google Docs, Sheets, and Slides as distinct products", () => {
 
 test("does not apply Google product metadata to unrelated hosts", () => {
   assert.equal(getKnownBookmarkMetadata("https://example.com/google-drive"), null);
+});
+test("browser root containers are not treated as user folders", () => {
+  assert.equal(normalizeBrowserFolderPath("Bookmarks bar"), null);
+  assert.equal(normalizeBrowserFolderPath("Other bookmarks"), null);
+  assert.equal(normalizeBrowserFolderPath(""), null);
+  assert.equal(normalizeBrowserFolderPath(null), null);
+  assert.equal(normalizeBrowserFolderPath("Bookmarks bar/Work/Design"), "Work/Design");
+  assert.equal(normalizeBrowserFolderPath("Other bookmarks/Reading"), "Reading");
+  assert.equal(normalizeBrowserFolderPath("Work/Design"), "Work/Design");
 });

@@ -92,6 +92,30 @@ export function isGenericBrowserFolder(folder?: string | null): boolean {
     || CATEGORIES.some((category) => category.toLowerCase() === normalizedFolder);
 }
 
+const BROWSER_ROOT_FOLDERS = new Set([
+  "bookmarks bar",
+  "bookmarks toolbar",
+  "favorites bar",
+  "other bookmarks",
+  "other favorites",
+  "mobile bookmarks",
+  "mobile favorites",
+]);
+
+/**
+ * Browser root containers ("Bookmarks bar", "Other bookmarks", ...) are not
+ * folders the user created. Strip them so a bookmark sitting directly in a root
+ * has no folder (null) and "Bookmarks bar/Work" becomes "Work".
+ */
+export function normalizeBrowserFolderPath(folder?: string | null): string | null {
+  if (!folder) return null;
+  const parts = folder.split("/").map((part) => part.trim()).filter(Boolean);
+  while (parts.length > 0 && BROWSER_ROOT_FOLDERS.has(parts[0].toLowerCase())) {
+    parts.shift();
+  }
+  return parts.length > 0 ? parts.join("/") : null;
+}
+
 export interface BookmarkFolderExample {
   folder_path: string | null;
   title: string | null;
