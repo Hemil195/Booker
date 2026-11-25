@@ -16,7 +16,7 @@ export function NoBookmarksState({
   onAddBookmark: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-20 px-4 text-center animate-fade-in">
+    <div className="col-span-full flex w-full flex-col items-center justify-center py-20 px-4 text-center animate-fade-in">
       <div
         className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
         style={{

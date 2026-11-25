@@ -71,25 +71,37 @@ export async function POST(req: NextRequest) {
   }
 
   // Upsert bookmark: lookup by browser_bookmark_id or user_id + url
-  let existing: { id: string; browser_bookmark_id: string | null } | null = null;
+  let existing: { id: string; browser_bookmark_id: string | null; deleted_at: string | null } | null = null;
 
   if (browser_bookmark_id) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("bookmarks")
-      .select("id, browser_bookmark_id")
+      .select("id, browser_bookmark_id, deleted_at")
       .eq("device_id", auth.deviceId)
       .eq("browser_bookmark_id", browser_bookmark_id)
       .maybeSingle();
+    if (error) {
+      return NextResponse.json(
+        { error: { code: "DB_ERROR", message: error.message } },
+        { status: 500 },
+      );
+    }
     existing = data;
   }
 
   if (!existing && url) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("bookmarks")
-      .select("id, browser_bookmark_id")
+      .select("id, browser_bookmark_id, deleted_at")
       .eq("user_id", auth.userId)
       .eq("url", url)
       .maybeSingle();
+    if (error) {
+      return NextResponse.json(
+        { error: { code: "DB_ERROR", message: error.message } },
+        { status: 500 },
+      );
+    }
     existing = data;
   }
 
@@ -100,14 +112,22 @@ export async function POST(req: NextRequest) {
 
     // A backfill or duplicate create event must not replace the user's saved folder.
     // Apply browser edits only when this is the same linked browser bookmark.
-    if (event === "updated" && browser_bookmark_id === existing.browser_bookmark_id) {
+    if (
+      existing.deleted_at ||
+      (event === "updated" && browser_bookmark_id === existing.browser_bookmark_id)
+    ) {
+      const restoredAt = new Date().toISOString();
       const { error } = await supabase
         .from("bookmarks")
         .update({
+          device_id: auth.deviceId,
           url,
           title: title ?? url,
           folder_path: normalizeBrowserFolderPath(folder_path),
-          updated_at: new Date().toISOString(),
+          browser_bookmark_id: browser_bookmark_id ?? null,
+          source: "browser",
+          ...(existing.deleted_at ? { created_at: restoredAt } : {}),
+          updated_at: restoredAt,
           deleted_at: null,
         })
         .eq("id", existing.id);

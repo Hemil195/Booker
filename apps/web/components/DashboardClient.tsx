@@ -418,7 +418,7 @@ export function DashboardClient({
               <SkeletonRows count={6} />
             ) : displayedBookmarks.length === 0 ? (
               searchQuery ? (
-                <div className="text-center py-12">
+                <div className="col-span-full text-center py-12">
                   <p className="text-sm font-medium" style={{ color: "var(--bk-text-primary)" }}>
                     No bookmarks match &quot;{searchQuery}&quot;
                   </p>

@@ -105,19 +105,67 @@ export function AddBookmarkDialog({
         ? inferBookmarkFolder(title.trim() || url.trim(), url.trim(), null, folderExamples)
         : folderPath;
 
-    const { data: inserted, error: insertError } = await supabase.from("bookmarks").insert({
-      user_id: userId,
-      device_id: targetDevId,
-      url: url.trim(),
-      title: title.trim() || url.trim(),
-      folder_path: resolvedFolder,
-      source: "dashboard",
-      description_pending: false,
-    }).select("id").single();
+    const bookmarkUrl = url.trim();
+    const bookmarkTitle = title.trim() || bookmarkUrl;
+    const { data: existing, error: lookupError } = await supabase
+      .from("bookmarks")
+      .select("id, deleted_at")
+      .eq("user_id", userId)
+      .eq("url", bookmarkUrl)
+      .maybeSingle();
+
+    if (lookupError) {
+      setLoading(false);
+      setError("Failed to check for an existing bookmark. Please try again.");
+      return;
+    }
+
+    let savedId: string | null = null;
+    let saveError: string | null = null;
+
+    if (existing && !existing.deleted_at) {
+      setLoading(false);
+      setError("This bookmark is already saved.");
+      return;
+    }
+
+    if (existing) {
+      const restoredAt = new Date().toISOString();
+      const { data: restored, error } = await supabase
+        .from("bookmarks")
+        .update({
+          device_id: targetDevId,
+          title: bookmarkTitle,
+          folder_path: resolvedFolder,
+          browser_bookmark_id: null,
+          source: "dashboard",
+          description_pending: false,
+          created_at: restoredAt,
+          updated_at: restoredAt,
+          deleted_at: null,
+        })
+        .eq("id", existing.id)
+        .select("id")
+        .single();
+      savedId = restored?.id ?? null;
+      saveError = error?.message ?? null;
+    } else {
+      const { data: inserted, error } = await supabase.from("bookmarks").insert({
+        user_id: userId,
+        device_id: targetDevId,
+        url: bookmarkUrl,
+        title: bookmarkTitle,
+        folder_path: resolvedFolder,
+        source: "dashboard",
+        description_pending: false,
+      }).select("id").single();
+      savedId = inserted?.id ?? null;
+      saveError = error?.message ?? null;
+    }
 
     setLoading(false);
 
-    if (insertError || !inserted) {
+    if (saveError || !savedId) {
       setError("Failed to save bookmark. Please try again.");
       return;
     }

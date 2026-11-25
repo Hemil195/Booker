@@ -75,6 +75,48 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE);
+    const { data: deletedBookmarks, error: deletedLookupError } = await supabase
+      .from("bookmarks")
+      .select("id, url")
+      .eq("user_id", auth.userId)
+      .in("url", chunk.map((row) => row.url))
+      .not("deleted_at", "is", null);
+
+    if (deletedLookupError) {
+      return NextResponse.json(
+        { error: { code: "DB_ERROR", message: deletedLookupError.message } },
+        { status: 500 },
+      );
+    }
+
+    const deletedByUrl = new Map((deletedBookmarks ?? []).map((bookmark) => [bookmark.url, bookmark.id]));
+    for (const row of chunk) {
+      const deletedId = deletedByUrl.get(row.url);
+      if (!deletedId) continue;
+
+      const { error: restoreError } = await supabase
+        .from("bookmarks")
+        .update({
+          device_id: row.device_id,
+          title: row.title,
+          folder_path: row.folder_path,
+          browser_bookmark_id: row.browser_bookmark_id,
+          source: row.source,
+          description_pending: false,
+          created_at: row.updated_at,
+          updated_at: row.updated_at,
+          deleted_at: null,
+        })
+        .eq("id", deletedId);
+
+      if (restoreError) {
+        return NextResponse.json(
+          { error: { code: "DB_ERROR", message: restoreError.message } },
+          { status: 500 },
+        );
+      }
+    }
+
     const { data, error } = await supabase
       .from("bookmarks")
       .upsert(chunk, {
