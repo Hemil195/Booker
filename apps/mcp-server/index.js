@@ -19,6 +19,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABAS
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const HASH_SECRET = process.env.API_KEY_HASH_SECRET;
 const PORT = parseInt(process.env.PORT ?? "3001", 10);
+const BOOKAR_WEB_URL = (process.env.BOOKAR_WEB_URL || process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
 if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !HASH_SECRET) {
   console.error("Missing env vars: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, API_KEY_HASH_SECRET");
@@ -66,7 +67,7 @@ function formatBookmark(bm, index) {
 }
 
 // ── MCP Server factory ────────────────────────────────────────────────────────
-function createBookarMcpServer(userId, deviceId) {
+function createBookarMcpServer(userId, deviceId, rawKey) {
   const server = new McpServer({ name: "bookar", version: "2.0.0" });
   const uid = userId;
 
@@ -143,10 +144,28 @@ function createBookarMcpServer(userId, deviceId) {
           folder_path: folder ?? null,
           tags: tagsArr,
           source: "mcp",
-          description_pending: false,
+          description_pending: true,
         }).select("id, title, url").single()
       );
       if (error) return { content: [{ type: "text", text: `❌ Failed to save: ${error.message}` }] };
+      void fetch(`${BOOKAR_WEB_URL}/api/generate-bookmark-description`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${rawKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          bookmark_id: data.id,
+          preserve_folder: Boolean(folder),
+          preserve_description: Boolean(notes),
+        }),
+      }).then(async (response) => {
+        if (!response.ok) {
+          console.error("Failed to queue bookmark description:", response.status, await response.text());
+        }
+      }).catch((error) => {
+        console.error("Failed to queue bookmark description:", error);
+      });
       return {
         content: [{
           type: "text", text:
@@ -759,7 +778,7 @@ async function handleHttpRequest(req, res) {
       return;
     }
 
-    const mcpServer = createBookarMcpServer(device.user_id, device.id);
+    const mcpServer = createBookarMcpServer(device.user_id, device.id, rawKey);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: process.env.MCP_SSE ? false : true,

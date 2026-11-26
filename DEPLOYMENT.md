@@ -68,6 +68,7 @@ standalone server only if you want a separate MCP service.
 SUPABASE_URL=https://your-supabase-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 API_KEY_HASH_SECRET=your-secure-random-32-char-string
+BOOKAR_WEB_URL=https://your-app-domain.vercel.app
 ```
 
 4. Deploy the project. Note down the public MCP endpoint URL:

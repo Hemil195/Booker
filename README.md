@@ -14,8 +14,8 @@ when you ask.
 3. Search, organize, and manage bookmarks from the dashboard. Changes made in Bookar are sent back
    to the linked browser when it next syncs (normally within a minute); you can also choose **Sync
    Now** in the extension.
-4. Ask Bookar to create an AI summary when you need one. Summaries are not automatically generated
-   for every bookmark.
+4. With a Groq or NVIDIA API key configured, Bookar automatically queues a description and tags
+   when you add a bookmark. You can also ask Bookar to regenerate its summary later.
 5. Optionally connect an AI assistant from **Connections & AI** so it can work with your library.
 
 The extension only records a visit when the exact web address is already saved as a bookmark in
@@ -30,7 +30,7 @@ their own copy of Bookar.
 
 - Syncs bookmarks and their folder paths between supported Chromium browsers and Bookar
 - Lets you search, organize, move, share, and manage bookmarks from the dashboard
-- Generates or regenerates AI summaries on demand using Groq, with NVIDIA as a fallback
+- Generates AI summaries when bookmarks are added and on demand using Groq, with NVIDIA as a fallback
 - Offers an optional AI connection with 15 actions for searching and managing bookmarks
 
 ## Monorepo structure
@@ -156,6 +156,7 @@ be the public web-app origin in production; local development can use `http://lo
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 API_KEY_HASH_SECRET=   # must match web's value
+BOOKAR_WEB_URL=http://localhost:3000  # web app URL used to queue AI descriptions
 PORT=3001
 ```
 

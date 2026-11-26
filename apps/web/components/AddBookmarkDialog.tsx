@@ -139,7 +139,7 @@ export function AddBookmarkDialog({
           folder_path: resolvedFolder,
           browser_bookmark_id: null,
           source: "dashboard",
-          description_pending: false,
+          description_pending: true,
           created_at: restoredAt,
           updated_at: restoredAt,
           deleted_at: null,
@@ -157,7 +157,7 @@ export function AddBookmarkDialog({
         title: bookmarkTitle,
         folder_path: resolvedFolder,
         source: "dashboard",
-        description_pending: false,
+        description_pending: true,
       }).select("id").single();
       savedId = inserted?.id ?? null;
       saveError = error?.message ?? null;
@@ -170,10 +170,18 @@ export function AddBookmarkDialog({
       return;
     }
 
-    // Trigger background processing
-    fetch("/api/sync-bookmark-batch", {
-      method: "POST",
-    }).catch(() => {});
+    try {
+      const generationResponse = await fetch("/api/generate-bookmark-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookmark_id: savedId, preserve_folder: true }),
+      });
+      if (!generationResponse.ok) {
+        console.error("Failed to queue bookmark description:", await generationResponse.text());
+      }
+    } catch (error) {
+      console.error("Failed to queue bookmark description:", error);
+    }
 
     setUrl("");
     setTitle("");

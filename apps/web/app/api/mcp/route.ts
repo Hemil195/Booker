@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHmac } from "crypto";
+import { scheduleBookmarkAiDescription } from "@/lib/aiIngest";
 
 // ── Vercel config ─────────────────────────────────────────────────────────────
 export const dynamic = "force-dynamic";
@@ -576,12 +577,21 @@ async function executeTool(
           folder_path: folder,
           tags: tags.length ? tags : null,
           source: "mcp",
-          description_pending: false,
+          description_pending: true,
         })
         .select("id, title, url")
         .single(),
     );
     if (error) return `❌ Failed to save: ${error.message}`;
+    scheduleBookmarkAiDescription({
+      id: data.id,
+      url: data.url,
+      title: data.title ?? url,
+      folder,
+    }, {
+      preserveFolder: Boolean(folder),
+      preserveDescription: Boolean(notes),
+    });
     return `✅ Saved bookmark:\n**${data.title}**\nURL: ${data.url}\nID: \`${data.id}\`${folder ? `\nFolder: ${folder}` : ""}${tags.length ? `\nTags: ${tags.join(", ")}` : ""}`;
   }
 

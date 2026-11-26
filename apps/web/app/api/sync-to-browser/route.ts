@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     .eq("user_id", auth.userId)
     .is("browser_bookmark_id", null)
     .is("deleted_at", null)
-    .or(`device_id.eq.${auth.deviceId},device_id.is.null`)
+    .or(`device_id.eq.${auth.deviceId},device_id.is.null,source.in.(bot,mcp,api)`)
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -77,12 +77,23 @@ export async function POST(req: NextRequest) {
 
   const supabase = createSupabaseAdminClient();
 
-  await supabase
+  const { data, error } = await supabase
     .from("bookmarks")
-    .update({ browser_bookmark_id: body.browser_bookmark_id })
+    .update({
+      device_id: auth.deviceId,
+      browser_bookmark_id: body.browser_bookmark_id,
+    })
     .eq("id", body.bookmark_id)
     .eq("user_id", auth.userId)
-    .eq("device_id", auth.deviceId);
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    return NextResponse.json({ error: { code: "DB_ERROR", message: error.message } }, { status: 500 });
+  }
+  if (!data) {
+    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Bookmark not found" } }, { status: 404 });
+  }
 
   return NextResponse.json({ status: "updated" });
 }

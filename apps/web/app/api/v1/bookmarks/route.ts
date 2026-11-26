@@ -5,6 +5,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
+import { scheduleBookmarkAiDescription } from "@/lib/aiIngest";
+
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const { auth, error: authError } = await requireDeviceAuth(req);
@@ -39,7 +42,7 @@ export async function POST(req: NextRequest) {
       title: title ?? url,
       description: notes ?? null,
       source: "bot",
-      description_pending: false,
+      description_pending: true,
     })
     .select("id")
     .single();
@@ -50,6 +53,12 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
+
+  scheduleBookmarkAiDescription({
+    id: data.id,
+    url,
+    title: title ?? url,
+  }, { preserveDescription: Boolean(notes) });
 
   return NextResponse.json({ bookmark_id: data.id, status: "created" }, {
     status: 201,

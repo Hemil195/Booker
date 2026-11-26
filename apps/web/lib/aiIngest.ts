@@ -5,6 +5,19 @@
 import { createSupabaseAdminClient } from "./supabaseClient";
 import { isGenericBrowserFolder, normalizeCategory } from "./bookmarkCategory";
 import { getKnownBookmarkMetadata } from "./knownBookmarkMetadata";
+import { after } from "next/server";
+
+export interface BookmarkAiJob {
+  id: string;
+  url: string;
+  title?: string;
+  folder?: string | null;
+}
+
+export interface BookmarkAiOptions {
+  preserveFolder?: boolean;
+  preserveDescription?: boolean;
+}
 
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const NVIDIA_MODEL = process.env.NVIDIA_MODEL ?? "nvidia/nemotron-3.5-lightning-30b-a3b";
@@ -222,7 +235,7 @@ export async function processBookmarkAiDescription(
   url: string,
   currentTitle?: string,
   currentFolder?: string | null,
-  options: { preserveFolder?: boolean } = {},
+  options: BookmarkAiOptions = {},
 ): Promise<string | null> {
   const supabase = createSupabaseAdminClient();
 
@@ -317,13 +330,14 @@ export async function processBookmarkAiDescription(
       updated_at: new Date().toISOString(),
     };
     if (!options.preserveFolder) update.folder_path = folder;
-    if (aiDescription) update.description = aiDescription;
+    if (aiDescription && !options.preserveDescription) update.description = aiDescription;
 
     // 3. Update bookmark row
     await supabase
       .from("bookmarks")
       .update(update)
-      .eq("id", bookmarkId);
+      .eq("id", bookmarkId)
+      .is("deleted_at", null);
     return folder;
   } catch (err) {
     console.error("AI Ingest error:", err);
@@ -333,4 +347,39 @@ export async function processBookmarkAiDescription(
       .eq("id", bookmarkId);
     return currentFolder ?? null;
   }
+}
+
+export function scheduleBookmarkAiDescription(
+  bookmark: BookmarkAiJob,
+  options: BookmarkAiOptions = {},
+) {
+  after(async () => {
+    await processBookmarkAiDescription(
+      bookmark.id,
+      bookmark.url,
+      bookmark.title,
+      bookmark.folder,
+      options,
+    );
+  });
+}
+
+export function scheduleBookmarkAiDescriptions(
+  bookmarks: BookmarkAiJob[],
+  options: BookmarkAiOptions = {},
+) {
+  if (bookmarks.length === 0) return;
+
+  after(async () => {
+    for (const [index, bookmark] of bookmarks.entries()) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, 1000));
+      await processBookmarkAiDescription(
+        bookmark.id,
+        bookmark.url,
+        bookmark.title,
+        bookmark.folder,
+        options,
+      );
+    }
+  });
 }

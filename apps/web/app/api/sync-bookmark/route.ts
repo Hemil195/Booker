@@ -6,6 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
 import { normalizeBrowserFolderPath } from "@/lib/bookmarkCategory";
+import { scheduleBookmarkAiDescription } from "@/lib/aiIngest";
+
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   // Auth
@@ -106,6 +109,7 @@ export async function POST(req: NextRequest) {
   }
 
   let bookmarkId: string;
+  let shouldGenerateDescription = false;
 
   if (existing) {
     bookmarkId = existing.id;
@@ -126,6 +130,7 @@ export async function POST(req: NextRequest) {
           folder_path: normalizeBrowserFolderPath(folder_path),
           browser_bookmark_id: browser_bookmark_id ?? null,
           source: "browser",
+          description_pending: true,
           ...(existing.deleted_at ? { created_at: restoredAt } : {}),
           updated_at: restoredAt,
           deleted_at: null,
@@ -138,6 +143,7 @@ export async function POST(req: NextRequest) {
           { status: 500 },
         );
       }
+      shouldGenerateDescription = true;
     }
   } else {
     // Insert new
@@ -151,7 +157,7 @@ export async function POST(req: NextRequest) {
         folder_path: normalizeBrowserFolderPath(folder_path),
         browser_bookmark_id: browser_bookmark_id ?? null,
         source: "browser",
-        description_pending: false,
+        description_pending: true,
       })
       .select("id")
       .single();
@@ -163,6 +169,7 @@ export async function POST(req: NextRequest) {
       );
     }
     bookmarkId = inserted.id;
+    shouldGenerateDescription = true;
   }
 
   // Update device last_synced_at
@@ -170,6 +177,15 @@ export async function POST(req: NextRequest) {
     .from("devices")
     .update({ last_synced_at: new Date().toISOString() })
     .eq("id", auth.deviceId);
+
+  if (shouldGenerateDescription) {
+    scheduleBookmarkAiDescription({
+      id: bookmarkId,
+      url,
+      title: title ?? url,
+      folder: normalizeBrowserFolderPath(folder_path),
+    });
+  }
 
   return NextResponse.json({ bookmark_id: bookmarkId, status: "synced" });
 }

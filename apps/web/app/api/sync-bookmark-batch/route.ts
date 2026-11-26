@@ -11,6 +11,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireDeviceAuth } from "@/lib/auth";
 import { createSupabaseAdminClient } from "@/lib/supabaseClient";
 import { normalizeBrowserFolderPath } from "@/lib/bookmarkCategory";
+import { scheduleBookmarkAiDescriptions, type BookmarkAiJob } from "@/lib/aiIngest";
+
+export const maxDuration = 60;
 
 interface BookmarkInput {
   event?: string;
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest) {
     folder_path: normalizeBrowserFolderPath(bm.folder_path),
     browser_bookmark_id: bm.browser_bookmark_id || null,
     source: "browser" as const,
-    description_pending: false,
+    description_pending: true,
     updated_at: new Date().toISOString(),
     deleted_at: null,
   }));
@@ -72,6 +75,7 @@ export async function POST(req: NextRequest) {
   // Perform bulk upsert in chunks of 100 for fast DB execution
   const BATCH_SIZE = 100;
   let insertedCount = 0;
+  const newlyAddedBookmarks: BookmarkAiJob[] = [];
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE);
@@ -102,7 +106,7 @@ export async function POST(req: NextRequest) {
           folder_path: row.folder_path,
           browser_bookmark_id: row.browser_bookmark_id,
           source: row.source,
-          description_pending: false,
+          description_pending: true,
           created_at: row.updated_at,
           updated_at: row.updated_at,
           deleted_at: null,
@@ -115,6 +119,12 @@ export async function POST(req: NextRequest) {
           { status: 500 },
         );
       }
+      newlyAddedBookmarks.push({
+        id: deletedId,
+        url: row.url,
+        title: row.title,
+        folder: row.folder_path,
+      });
     }
 
     const { data, error } = await supabase
@@ -127,6 +137,18 @@ export async function POST(req: NextRequest) {
 
     if (!error && data) {
       insertedCount += data.length;
+      const rowsByUrl = new Map(chunk.map((row) => [row.url, row]));
+      for (const bookmark of data) {
+        const row = rowsByUrl.get(bookmark.url);
+        if (row) {
+          newlyAddedBookmarks.push({
+            id: bookmark.id,
+            url: bookmark.url,
+            title: bookmark.title,
+            folder: row.folder_path,
+          });
+        }
+      }
     } else if (error) {
       console.warn("Batch upsert notice, running resilient fallback:", error.message);
       // Insert only when no record exists, even if the unique constraint is absent.
@@ -148,6 +170,12 @@ export async function POST(req: NextRequest) {
             .single();
           if (!insertErr && inserted) {
             insertedCount++;
+            newlyAddedBookmarks.push({
+              id: inserted.id,
+              url: row.url,
+              title: row.title,
+              folder: row.folder_path,
+            });
           }
         }
       }
@@ -159,6 +187,8 @@ export async function POST(req: NextRequest) {
     .from("devices")
     .update({ last_synced_at: new Date().toISOString() })
     .eq("id", auth.deviceId);
+
+  scheduleBookmarkAiDescriptions(newlyAddedBookmarks);
 
   const durationMs = Date.now() - startTime;
 
