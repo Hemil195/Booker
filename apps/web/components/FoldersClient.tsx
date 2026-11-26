@@ -233,7 +233,12 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
 
   const persistMove = async (ids: string[], targetFolder: string) => {
     if (ids.length === 0) return;
-    const folderPath = targetFolder === "Uncategorized" ? null : targetFolder;
+    const folderPath = targetFolder === "__bookmarks_bar__"
+      ? ""
+      : targetFolder === "Uncategorized"
+        ? null
+        : targetFolder;
+    const destination = targetFolder === "__bookmarks_bar__" ? "Bookmarks bar" : targetFolder;
     const { error } = await supabase
       .from("bookmarks")
       .update({ folder_path: folderPath, updated_at: new Date().toISOString() })
@@ -247,7 +252,7 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
     setBookmarks((prev) => prev.map((bookmark) =>
       ids.includes(bookmark.id) ? { ...bookmark, folder_path: folderPath } : bookmark,
     ));
-    showActionToast(`${ids.length} bookmark${ids.length === 1 ? "" : "s"} moved to ${targetFolder}.`);
+    showActionToast(`${ids.length} bookmark${ids.length === 1 ? "" : "s"} moved to ${destination}.`);
     return true;
   };
 
@@ -312,7 +317,10 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
   const handleDelete = async (id: string) => {
     await supabase
       .from("bookmarks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
   };
@@ -390,7 +398,10 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
     const ids = Array.from(selectedIds);
     await supabase
       .from("bookmarks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .in("id", ids);
     setBookmarks((prev) => prev.filter((b) => !selectedIds.has(b.id)));
     setSelectedIds(new Set());
@@ -776,6 +787,7 @@ function FoldersClientContent({ initialBookmarks, initialFolder = null }: Folder
                 style={{ background: "var(--bk-bg)", border: "1px solid var(--bk-border)", color: "var(--bk-text-primary)" }}
               >
                 <option value="">Choose a folder</option>
+                <option value="__bookmarks_bar__">Bookmarks bar</option>
                 <option value="Uncategorized">No folder (top level)</option>
                 {existingFolders.filter((folder) => folder !== "Uncategorized").map((folder) => (
                   <option key={folder} value={folder}>{folder}</option>

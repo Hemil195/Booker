@@ -22,6 +22,10 @@ The extension only records a visit when the exact web address is already saved a
 that browser. It needs the browser's history permission for this feature, and it does not upload
 your general browsing history or import visits from before tracking was enabled.
 
+To move an existing bookmark to Chrome's Bookmarks bar from Bookar, select it on the **Folders**
+page, choose **Move**, then select **Bookmarks bar**. Click **Sync Now** in the extension to apply
+the move. **No folder** leaves the bookmark where it already is in the browser.
+
 For a step-by-step guide written for Bookar users, open **Docs** in the Bookar website (or visit
 `/docs` on your own Bookar site). This README also includes the technical setup for people running
 their own copy of Bookar.
@@ -121,9 +125,11 @@ separately, set its Vercel project root to `apps/mcp-server`.
 5. Approve the requested bookmark and history permissions, click the Bookar icon, and enter the
    6-digit linking code from the dashboard.
 
-The first link backfills existing browser bookmarks. Matching URLs already in Bookar are left
-unchanged during that backfill; newly imported bookmarks keep their browser folder or use the
-user's saved-folder patterns when the browser path is generic.
+The first link backfills existing browser bookmarks without moving or renaming them. Matching URLs
+already in Bookar are linked to their existing browser bookmark instead of being copied again.
+Browser-imported folders and titles are preserved while Bookar generates descriptions and tags.
+The extension applies later folder changes incrementally, so unrelated metadata updates do not
+reconcile the whole browser bookmark tree.
 
 The extension records visits only when the visited URL exactly matches a bookmark saved in that
 browser, then updates the matching Bookar bookmark's last-visited date and visit count. Tracking

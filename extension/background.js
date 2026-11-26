@@ -49,6 +49,7 @@ async function handleUnauthorizedKey() {
     "bookar_device_name",
     "bookar_browser",
     "bookar_backfill_done",
+    "bookar_sync_cursor",
     "bookar_pending_sync",
   ]);
 }
@@ -100,13 +101,16 @@ async function syncBookmark(payload, retryCount = 0) {
 async function getFolderPath(parentId) {
   if (!parentId) return null;
   try {
+    const bookmarksBarId = await getBookmarksBarId();
+    if (parentId === bookmarksBarId) return "";
+
     const [node] = await chrome.bookmarks.get(parentId);
     if (!node || node.url) return null;
 
     const parts = [];
     let current = node;
 
-    while (current && current.id !== "0" && current.id !== "1" && current.id !== "2") {
+    while (current && !["0", "1", "2", "3"].includes(current.id)) {
       if (current.title) parts.unshift(current.title);
       if (!current.parentId) break;
       try {
@@ -153,7 +157,13 @@ function buildFolderPathMap(nodes, parentPath = "", map = {}) {
         : node.title ?? "";
 
     if (!node.url && node.id) {
-      map[node.id] = path;
+      if (node.id === "1") {
+        map[node.id] = "";
+      } else if (node.id === "2" || node.id === "3") {
+        map[node.id] = null;
+      } else {
+        map[node.id] = path;
+      }
     }
 
     if (node.children) {
@@ -184,7 +194,7 @@ async function backfillAllBookmarks() {
       browser_bookmark_id: bm.id,
       url: bm.url,
       title: bm.title,
-      folder_path: bm.parentId ? folderPathMap[bm.parentId] || null : null,
+      folder_path: bm.parentId ? folderPathMap[bm.parentId] ?? null : null,
     }));
 
     const res = await fetch(batchEndpoint, {
@@ -200,6 +210,7 @@ async function backfillAllBookmarks() {
       await handleUnauthorizedKey();
       return;
     }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     console.log(`Bookar: Backfilled ${payload.length} bookmarks.`);
     await chrome.storage.local.set({ bookar_backfill_done: true });
@@ -268,19 +279,26 @@ async function findOrCreateBrowserFolder(folderPath) {
 // Older versions stored browser root names inside paths ("Bookmarks bar/Work").
 // Treat those as the user's real folder ("Work") and a bare root as "no folder".
 const BROWSER_ROOT_NAMES = [
-  "bookmarks bar", "bookmarks toolbar", "favorites bar",
+  "bookmark bar", "bookmarks bar", "bookmark toolbar", "bookmarks toolbar",
+  "favorite bar", "favorites bar",
   "other bookmarks", "other favorites", "mobile bookmarks", "mobile favorites",
 ];
 function normalizeFolderPath(folderPath) {
+  if (folderPath === "") return "";
   if (!folderPath) return null;
   const parts = folderPath.split("/").map((part) => part.trim()).filter(Boolean);
+  const isBookmarksBar = [
+    "bookmark bar", "bookmarks bar", "bookmark toolbar", "bookmarks toolbar",
+    "favorite bar", "favorites bar",
+  ].includes(parts[0]?.toLowerCase());
   while (parts.length > 0 && BROWSER_ROOT_NAMES.includes(parts[0].toLowerCase())) {
     parts.shift();
   }
-  return parts.length > 0 ? parts.join("/") : null;
+  return parts.length > 0 ? parts.join("/") : isBookmarksBar ? "" : null;
 }
 
 async function applyDashboardChanges(changes) {
+  let succeeded = true;
   for (const change of changes ?? []) {
     try {
       let bookmark;
@@ -313,11 +331,16 @@ async function applyDashboardChanges(changes) {
         await chrome.bookmarks.update(bookmark.id, updatedFields);
       }
 
-      // Only touch the bookmark's location when the dashboard names a real
-      // folder that differs from the browser. A bookmark with no folder in the
-      // dashboard is left exactly where it is in the browser.
+      // An empty folder path explicitly means the browser's bookmarks bar;
+      // null means to leave the existing browser location unchanged.
       const wantedFolderPath = normalizeFolderPath(change.folder_path);
-      if (wantedFolderPath) {
+      if (wantedFolderPath === "") {
+        const bookmarksBarId = await getBookmarksBarId();
+        if (!bookmarksBarId) throw new Error("Bookmarks bar is unavailable.");
+        if (bookmark.parentId !== bookmarksBarId) {
+          await chrome.bookmarks.move(bookmark.id, { parentId: bookmarksBarId });
+        }
+      } else if (wantedFolderPath) {
         const currentFolderPath = await getFolderPath(bookmark.parentId);
         if (currentFolderPath !== wantedFolderPath) {
           const parentId = await findOrCreateBrowserFolder(wantedFolderPath);
@@ -325,9 +348,11 @@ async function applyDashboardChanges(changes) {
         }
       }
     } catch (err) {
+      succeeded = false;
       console.warn("Bookar: Failed to apply dashboard bookmark change:", err);
     }
   }
+  return succeeded;
 }
 
 let syncWebToBrowserPromise = null;
@@ -356,9 +381,13 @@ async function performWebToBrowserSync() {
   if (!apiKey) return;
   const apiBase = await getApiBase();
   const webSyncEndpoint = `${apiBase}/api/sync-to-browser`;
+  const { bookar_sync_cursor: syncCursor } = await chrome.storage.local.get("bookar_sync_cursor");
+  const syncUrl = syncCursor
+    ? `${webSyncEndpoint}?since=${encodeURIComponent(syncCursor)}`
+    : webSyncEndpoint;
 
   try {
-    const res = await fetch(webSyncEndpoint, {
+    const res = await fetch(syncUrl, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
 
@@ -368,21 +397,26 @@ async function performWebToBrowserSync() {
     }
 
     if (!res.ok) return;
-    const { bookmarks, changes } = await res.json();
+    const { bookmarks, changes, sync_cursor: nextSyncCursor } = await res.json();
+    let succeeded = true;
 
     for (const bm of bookmarks ?? []) {
       try {
-        const parentId = normalizeFolderPath(bm.folder_path)
-          ? await findOrCreateBrowserFolder(normalizeFolderPath(bm.folder_path))
-          : await getBookmarksBarId();
-        const createdNode = await chrome.bookmarks.create({
-          title: bm.title || bm.url,
-          url: bm.url,
-          ...(parentId ? { parentId } : {}),
-        });
+        const [existingBookmark] = (await chrome.bookmarks.search({ url: bm.url }))
+          .filter((bookmark) => bookmark.url === bm.url);
+        let browserBookmark = existingBookmark;
+        if (!browserBookmark) {
+          const parentId = normalizeFolderPath(bm.folder_path)
+            ? await findOrCreateBrowserFolder(normalizeFolderPath(bm.folder_path))
+            : await getBookmarksBarId();
+          browserBookmark = await chrome.bookmarks.create({
+            title: bm.title || bm.url,
+            url: bm.url,
+            ...(parentId ? { parentId } : {}),
+          });
+        }
 
-        // Report browser_bookmark_id back to server so it is marked synced
-        await fetch(webSyncEndpoint, {
+        const linkResponse = await fetch(webSyncEndpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -390,15 +424,20 @@ async function performWebToBrowserSync() {
           },
           body: JSON.stringify({
             bookmark_id: bm.id,
-            browser_bookmark_id: createdNode.id,
+            browser_bookmark_id: browserBookmark.id,
           }),
         });
+        if (!linkResponse.ok) throw new Error(`HTTP ${linkResponse.status}`);
       } catch (err) {
+        succeeded = false;
         console.warn("Bookar: Failed to add bookmark into Chrome:", err);
       }
     }
 
-    await applyDashboardChanges(changes);
+    if (!(await applyDashboardChanges(changes))) succeeded = false;
+    if (succeeded && typeof nextSyncCursor === "string") {
+      await chrome.storage.local.set({ bookar_sync_cursor: nextSyncCursor });
+    }
   } catch (err) {
     console.error("Bookar: Web sync to browser error:", err);
   }
@@ -432,6 +471,7 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "DEVICE_LINKED") {
     chrome.storage.local.get("bookar_backfill_done").then(async (result) => {
+      await chrome.storage.local.remove("bookar_sync_cursor");
       if (!result.bookar_backfill_done) {
         await backfillAllBookmarks();
       }

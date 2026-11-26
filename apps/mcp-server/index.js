@@ -60,10 +60,37 @@ function formatBookmark(bm, index) {
     index != null ? `${index + 1}. **${bm.title ?? bm.url}**` : `**${bm.title ?? bm.url}**`,
     `   URL: ${bm.url}`,
     bm.description ? `   → ${bm.description}` : "",
-    bm.folder_path ? `   📁 ${bm.folder_path}` : "",
+    bm.folder_path === "" ? "   📁 Bookmarks bar" : bm.folder_path ? `   📁 ${bm.folder_path}` : "",
     Array.isArray(bm.tags) && bm.tags.length ? `   🏷 ${bm.tags.join(", ")}` : "",
     `   🗓 ${new Date(bm.created_at).toLocaleDateString()} | ID: \`${bm.id}\``,
   ].filter(Boolean).join("\n");
+}
+
+const BOOKMARKS_BAR_NAMES = new Set([
+  "bookmark bar",
+  "bookmarks bar",
+  "bookmark toolbar",
+  "bookmarks toolbar",
+  "favorite bar",
+  "favorites bar",
+]);
+const BROWSER_ROOT_NAMES = new Set([
+  ...BOOKMARKS_BAR_NAMES,
+  "other bookmarks",
+  "other favorites",
+  "mobile bookmarks",
+  "mobile favorites",
+]);
+
+function normalizeFolderPath(folder) {
+  if (typeof folder !== "string") return null;
+  if (folder === "") return "";
+  const parts = folder.split("/").map((part) => part.trim()).filter(Boolean);
+  const isBookmarksBar = BOOKMARKS_BAR_NAMES.has(parts[0]?.toLowerCase());
+  while (parts.length > 0 && BROWSER_ROOT_NAMES.has(parts[0].toLowerCase())) {
+    parts.shift();
+  }
+  return parts.length > 0 ? parts.join("/") : isBookmarksBar ? "" : null;
 }
 
 // ── MCP Server factory ────────────────────────────────────────────────────────
@@ -110,12 +137,13 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
     "save_bookmark",
     "Save a new bookmark to Bookar. Use when the user wants to bookmark or remember a URL. " +
     "Provide the URL, optional title, optional notes, and optional folder/tags. " +
+    "Use 'Bookmarks bar' when the user wants the browser bar; do not create a folder named 'Bookmark bar'. " +
     "Returns the saved bookmark's ID.",
     {
       url: { type: "string", description: "Full URL to bookmark (required)" },
       title: { type: "string", description: "Page title (optional)" },
       notes: { type: "string", description: "Description or reason saved (optional)" },
-      folder: { type: "string", description: "Folder path e.g. 'Work/AI' (optional)" },
+      folder: { type: "string", description: "Folder path e.g. 'Work/AI' (optional); use 'Bookmarks bar' for the browser bar" },
       tags: { type: "array", items: { type: "string" }, description: "Tags e.g. ['ai','tools'] (optional)" },
     },
     async ({ url, title, notes, folder, tags }) => {
@@ -136,12 +164,13 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
       }
 
       const tagsArr = Array.isArray(tags) ? tags.filter((tag) => typeof tag === "string").map((tag) => tag.trim()).filter(Boolean) : [];
+      const folderPath = folder === undefined ? null : normalizeFolderPath(folder);
       const { data, error } = await withTimeout(
         supabase.from("bookmarks").insert({
           user_id: uid, device_id: deviceId,
           url, title: typeof title === "string" && title.trim() ? title.trim() : url,
           description: notes ?? null,
-          folder_path: folder ?? null,
+          folder_path: folderPath,
           tags: tagsArr,
           source: "mcp",
           description_pending: true,
@@ -156,7 +185,7 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
         },
         body: JSON.stringify({
           bookmark_id: data.id,
-          preserve_folder: Boolean(folder),
+          preserve_folder: folderPath !== null,
           preserve_description: Boolean(notes),
         }),
       }).then(async (response) => {
@@ -170,7 +199,7 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
         content: [{
           type: "text", text:
             `✅ Saved: **${data.title}**\nURL: ${data.url}\nID: \`${data.id}\`` +
-            (folder ? `\nFolder: ${folder}` : "") +
+            (folderPath !== null ? `\nFolder: ${folderPath || "Bookmarks bar"}` : "") +
             (tagsArr.length ? `\nTags: ${tagsArr.join(", ")}` : "")
         }]
       };
@@ -195,7 +224,7 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
             `**${data.title ?? data.url}**`,
             `URL: ${data.url}`,
             data.description ? `Description: ${data.description}` : "",
-            data.folder_path ? `Folder: ${data.folder_path}` : "",
+            data.folder_path === "" ? "Folder: Bookmarks bar" : data.folder_path ? `Folder: ${data.folder_path}` : "",
             Array.isArray(data.tags) && data.tags.length ? `Tags: ${data.tags.join(", ")}` : "",
             `Saved: ${new Date(data.created_at).toLocaleDateString()}`,
             `ID: \`${data.id}\``,
@@ -207,12 +236,12 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
 
   server.tool(
     "update_bookmark",
-    "Edit a bookmark's title, notes, folder, or tags by ID.",
+    "Edit a bookmark's title, notes, folder, or tags by ID. Use 'Bookmarks bar' to place it directly on the browser bar; do not create a folder named 'Bookmark bar'.",
     {
       id: { type: "string", description: "Bookmark UUID to update" },
       title: { type: "string", description: "New title (optional)" },
       notes: { type: "string", description: "New description (optional)" },
-      folder: { type: "string", description: "New folder path (optional)" },
+      folder: { type: "string", description: "New folder path (optional); use 'Bookmarks bar' for the browser bar" },
       tags: { type: "array", items: { type: "string" }, description: "Replace tags (optional)" },
     },
     async ({ id, title, notes, folder, tags }) => {
@@ -220,7 +249,7 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
       const patch = {};
       if (title) patch.title = title;
       if (notes !== undefined) patch.description = notes || null;
-      if (folder !== undefined) patch.folder_path = folder || null;
+      if (folder !== undefined) patch.folder_path = normalizeFolderPath(folder);
       if (Array.isArray(tags)) patch.tags = tags.map(String);
       if (Object.keys(patch).length === 0)
         return { content: [{ type: "text", text: "❌ Nothing to update — provide title, notes, folder, or tags." }] };
@@ -231,7 +260,8 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
       );
       if (error) return { content: [{ type: "text", text: `❌ Update failed: ${error.message}` }] };
       if (!data) return { content: [{ type: "text", text: "❌ Active bookmark not found." }] };
-      return { content: [{ type: "text", text: `✅ Bookmark \`${id}\` updated.` }] };
+      const destination = patch.folder_path === "" ? " Destination set to the Bookmarks bar; the extension will sync shortly." : "";
+      return { content: [{ type: "text", text: `✅ Bookmark \`${id}\` updated.${destination}` }] };
     }
   );
 
@@ -445,7 +475,7 @@ function createBookarMcpServer(userId, deviceId, rawKey) {
       const lines = data.map((bookmark, index) =>
         `${index + 1}. **${bookmark.title ?? bookmark.url}** — ${bookmark.visit_count} visit(s)` +
         `${bookmark.last_visited_at ? `; last visited ${new Date(bookmark.last_visited_at).toLocaleString()}` : ""}` +
-        `\n   ${bookmark.url}${bookmark.folder_path ? `\n   Folder: ${bookmark.folder_path}` : ""}`
+        `\n   ${bookmark.url}${bookmark.folder_path === "" ? "\n   Folder: Bookmarks bar" : bookmark.folder_path ? `\n   Folder: ${bookmark.folder_path}` : ""}`
       );
       return { content: [{ type: "text", text: `🔥 **Most Visited Bookmarks** (top ${data.length}):\n\n${lines.join("\n\n")}` }] };
     }

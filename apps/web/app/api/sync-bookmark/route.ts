@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
     }
     const { error } = await supabase
       .from("bookmarks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq("device_id", auth.deviceId)
       .eq("browser_bookmark_id", browser_bookmark_id);
 
@@ -184,7 +187,7 @@ export async function POST(req: NextRequest) {
       url,
       title: title ?? url,
       folder: normalizeBrowserFolderPath(folder_path),
-    });
+    }, { preserveFolder: true, preserveTitle: true });
   }
 
   return NextResponse.json({ bookmark_id: bookmarkId, status: "synced" });

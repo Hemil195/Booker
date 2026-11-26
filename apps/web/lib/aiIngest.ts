@@ -16,6 +16,7 @@ export interface BookmarkAiJob {
 
 export interface BookmarkAiOptions {
   preserveFolder?: boolean;
+  preserveTitle?: boolean;
   preserveDescription?: boolean;
 }
 
@@ -312,24 +313,36 @@ export async function processBookmarkAiDescription(
     const category = normalizeCategory(modelCategory, evidence);
     const tags = normalizeTags(modelTags, domain);
     const finalTags = tags.length > 0 ? tags : fallbackTags(contextTitle, url);
-    const folder = knownMetadata?.folder
-      ?? (isGenericBrowserFolder(currentFolder) ? category : currentFolder ?? null);
+    const { data: latestBookmark, error: latestBookmarkError } = await supabase
+      .from("bookmarks")
+      .select("folder_path")
+      .eq("id", bookmarkId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (latestBookmarkError) throw latestBookmarkError;
+
+    const latestFolder = latestBookmark ? latestBookmark.folder_path : currentFolder;
+    const isExplicitBookmarksBar = latestFolder === "";
+    const folder = isExplicitBookmarksBar
+      ? ""
+      : knownMetadata?.folder
+        ?? (isGenericBrowserFolder(latestFolder) ? category : latestFolder ?? null);
 
     // Preserve the saved description unless a provider returned a new one.
     const update: {
-      title: string;
+      title?: string;
       tags: string[];
       folder_path?: string | null;
       description_pending: boolean;
       updated_at: string;
       description?: string;
     } = {
-      title: contextTitle,
       tags: finalTags,
       description_pending: false,
       updated_at: new Date().toISOString(),
     };
-    if (!options.preserveFolder) update.folder_path = folder;
+    if (!options.preserveTitle) update.title = contextTitle;
+    if (!options.preserveFolder && !isExplicitBookmarksBar) update.folder_path = folder;
     if (aiDescription && !options.preserveDescription) update.description = aiDescription;
 
     // 3. Update bookmark row

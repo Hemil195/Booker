@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { createHmac } from "crypto";
 import { scheduleBookmarkAiDescription } from "@/lib/aiIngest";
+import { normalizeBrowserFolderPath } from "@/lib/bookmarkCategory";
 
 // ── Vercel config ─────────────────────────────────────────────────────────────
 export const dynamic = "force-dynamic";
@@ -301,6 +302,7 @@ const TOOLS = [
     description:
       "Save a new bookmark to Bookar. Use this when the user wants to save, bookmark, or remember a URL. " +
       "Provide the URL, an optional title, optional notes, and an optional folder path. " +
+      "Use 'Bookmarks bar' when the user wants the Chrome bookmarks bar; do not create a folder named 'Bookmark bar'. " +
       "The system automatically queues AI description generation if no notes are given.",
     inputSchema: {
       type: "object",
@@ -314,7 +316,7 @@ const TOOLS = [
         },
         folder: {
           type: "string",
-          description: "Folder path, e.g. 'Work/AI' or 'Research' (optional)",
+          description: "Folder path such as 'Work/AI' (optional); use 'Bookmarks bar' to place directly on the browser bar",
         },
         tags: {
           type: "array",
@@ -340,14 +342,14 @@ const TOOLS = [
   {
     name: "update_bookmark",
     description:
-      "Edit an existing bookmark's title, notes, folder, or tags. Use this when the user wants to rename, re-tag, or reorganise a specific bookmark.",
+      "Edit an existing bookmark's title, notes, folder, or tags. Use this when the user wants to rename, re-tag, or reorganise a specific bookmark. For the browser's Bookmarks bar, set folder to 'Bookmarks bar'; do not create a folder named 'Bookmark bar'.",
     inputSchema: {
       type: "object",
       properties: {
         id: { type: "string", description: "Bookmark UUID to update" },
         title: { type: "string", description: "New title (optional)" },
         notes: { type: "string", description: "New description/notes (optional)" },
-        folder: { type: "string", description: "New folder path (optional)" },
+        folder: { type: "string", description: "New folder path (optional). Use 'Bookmarks bar' to place directly on the browser bar." },
         tags: {
           type: "array",
           items: { type: "string" },
@@ -553,7 +555,9 @@ async function executeTool(
     }
     const title = String(args.title || url).trim();
     const notes = args.notes ? String(args.notes) : null;
-    const folder = args.folder ? String(args.folder) : null;
+    const folder = args.folder === undefined || args.folder === null
+      ? null
+      : normalizeBrowserFolderPath(String(args.folder));
     const tags = Array.isArray(args.tags) ? args.tags.map(String) : [];
 
     // Check for existing duplicate
@@ -589,10 +593,11 @@ async function executeTool(
       title: data.title ?? url,
       folder,
     }, {
-      preserveFolder: Boolean(folder),
+      preserveFolder: folder !== null,
       preserveDescription: Boolean(notes),
     });
-    return `✅ Saved bookmark:\n**${data.title}**\nURL: ${data.url}\nID: \`${data.id}\`${folder ? `\nFolder: ${folder}` : ""}${tags.length ? `\nTags: ${tags.join(", ")}` : ""}`;
+    const folderLabel = folder === "" ? "Bookmarks bar" : folder;
+    return `✅ Saved bookmark:\n**${data.title}**\nURL: ${data.url}\nID: \`${data.id}\`${folderLabel ? `\nFolder: ${folderLabel}` : ""}${tags.length ? `\nTags: ${tags.join(", ")}` : ""}`;
   }
 
   // ── get_bookmark ───────────────────────────────────────────────────────────
@@ -612,7 +617,7 @@ async function executeTool(
       `**${data.title ?? data.url}**`,
       `URL: ${data.url}`,
       data.description ? `Description: ${data.description}` : "",
-      data.folder_path ? `Folder: ${data.folder_path}` : "",
+      data.folder_path === "" ? "Folder: Bookmarks bar" : data.folder_path ? `Folder: ${data.folder_path}` : "",
       Array.isArray(data.tags) && data.tags.length ? `Tags: ${data.tags.join(", ")}` : "",
       `Saved: ${new Date(data.created_at).toLocaleDateString()}`,
       `ID: \`${data.id}\``,
@@ -628,7 +633,9 @@ async function executeTool(
     const patch: Record<string, unknown> = {};
     if (args.title) patch.title = String(args.title);
     if (args.notes !== undefined) patch.description = args.notes ? String(args.notes) : null;
-    if (args.folder !== undefined) patch.folder_path = args.folder ? String(args.folder) : null;
+    if (args.folder !== undefined) {
+      patch.folder_path = args.folder === null ? null : normalizeBrowserFolderPath(String(args.folder));
+    }
     if (Array.isArray(args.tags)) patch.tags = args.tags.map(String);
     // Guard: at least one field must be changed
     if (Object.keys(patch).length === 0)
@@ -639,7 +646,8 @@ async function executeTool(
       db.from("bookmarks").update(patch).eq("id", id).eq("user_id", uid),
     );
     if (error) return `❌ Update failed: ${error.message}`;
-    return `✅ Bookmark \`${id}\` updated successfully.`;
+    const destination = patch.folder_path === "" ? " Destination set to the Bookmarks bar; the extension will sync shortly." : "";
+    return `✅ Bookmark \`${id}\` updated successfully.${destination}`;
   }
 
   // ── delete_bookmark ────────────────────────────────────────────────────────
@@ -649,7 +657,10 @@ async function executeTool(
     const { error } = await withTimeout(
       db
         .from("bookmarks")
-        .update({ deleted_at: new Date().toISOString() })
+        .update({
+          deleted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", id)
         .eq("user_id", uid),
     );
@@ -731,7 +742,7 @@ async function executeTool(
         `**${bm.title ?? bm.url}**`,
         `URL: ${bm.url}`,
         bm.description ? `→ ${bm.description}` : "",
-        bm.folder_path ? `📁 ${bm.folder_path}` : "",
+        bm.folder_path === "" ? "📁 Bookmarks bar" : bm.folder_path ? `📁 ${bm.folder_path}` : "",
         Array.isArray(bm.tags) && bm.tags.length ? `🏷 ${bm.tags.join(", ")}` : "",
         `🗓 ${new Date(bm.created_at).toLocaleDateString()} | ID: \`${bm.id}\``,
       ]
@@ -908,7 +919,7 @@ async function executeTool(
       ...data.map((bookmark, index) =>
         `${index + 1}. **${bookmark.title ?? bookmark.url}** — ${bookmark.visit_count} visit(s)` +
         `${bookmark.last_visited_at ? `; last visited ${new Date(bookmark.last_visited_at).toLocaleString()}` : ""}` +
-        `\n   ${bookmark.url}${bookmark.folder_path ? `\n   Folder: ${bookmark.folder_path}` : ""}`,
+        `\n   ${bookmark.url}${bookmark.folder_path === "" ? "\n   Folder: Bookmarks bar" : bookmark.folder_path ? `\n   Folder: ${bookmark.folder_path}` : ""}`,
       ),
     ].join("\n");
   }

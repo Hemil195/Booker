@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
   if (authError) return authError;
 
   const supabase = createSupabaseAdminClient();
+  const syncCursor = new Date().toISOString();
+  const requestedCursor = req.nextUrl.searchParams.get("since");
+  const since = requestedCursor && !Number.isNaN(Date.parse(requestedCursor))
+    ? new Date(requestedCursor).toISOString()
+    : null;
 
   const { data: bookmarks, error } = await supabase
     .from("bookmarks")
@@ -38,26 +43,30 @@ export async function GET(req: NextRequest) {
   const pageSize = 500;
   let offset = 0;
 
-  while (true) {
-    const { data, error: changesError } = await supabase
-      .from("bookmarks")
-      .select("id, browser_bookmark_id, url, title, folder_path, deleted_at")
-      .eq("user_id", auth.userId)
-      .eq("device_id", auth.deviceId)
-      .not("browser_bookmark_id", "is", null)
-      .order("updated_at", { ascending: true })
-      .range(offset, offset + pageSize - 1);
+  if (since) {
+    while (true) {
+      const { data, error: changesError } = await supabase
+        .from("bookmarks")
+        .select("id, browser_bookmark_id, url, title, folder_path, deleted_at")
+        .eq("user_id", auth.userId)
+        .eq("device_id", auth.deviceId)
+        .not("browser_bookmark_id", "is", null)
+        .gt("updated_at", since)
+        .lte("updated_at", syncCursor)
+        .order("updated_at", { ascending: true })
+        .range(offset, offset + pageSize - 1);
 
-    if (changesError) {
-      return NextResponse.json({ error: { code: "DB_ERROR", message: changesError.message } }, { status: 500 });
+      if (changesError) {
+        return NextResponse.json({ error: { code: "DB_ERROR", message: changesError.message } }, { status: 500 });
+      }
+
+      changes.push(...(data ?? []));
+      if (!data || data.length < pageSize) break;
+      offset += pageSize;
     }
-
-    changes.push(...(data ?? []));
-    if (!data || data.length < pageSize) break;
-    offset += pageSize;
   }
 
-  return NextResponse.json({ bookmarks: bookmarks || [], changes });
+  return NextResponse.json({ bookmarks: bookmarks || [], changes, sync_cursor: syncCursor });
 }
 
 export async function POST(req: NextRequest) {

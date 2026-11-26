@@ -99,11 +99,13 @@ export function AddBookmarkDialog({
 
     setLoading(true);
     setError(null);
-    const resolvedFolder = folderPath === "__uncategorized__"
-      ? null
-      : folderPath === "auto"
-        ? inferBookmarkFolder(title.trim() || url.trim(), url.trim(), null, folderExamples)
-        : folderPath;
+    const resolvedFolder = folderPath === "__bookmarks_bar__"
+      ? ""
+      : folderPath === "__uncategorized__"
+        ? null
+        : folderPath === "auto"
+          ? inferBookmarkFolder(title.trim() || url.trim(), url.trim(), null, folderExamples)
+          : folderPath;
 
     const bookmarkUrl = url.trim();
     const bookmarkTitle = title.trim() || bookmarkUrl;
@@ -276,6 +278,7 @@ export function AddBookmarkDialog({
               }}
             >
               <option value="auto">Auto sort from your bookmarks</option>
+              <option value="__bookmarks_bar__">Bookmarks bar</option>
               <option value="__uncategorized__">Keep uncategorized</option>
               {availableFolders.map((folder) => (
                 <option key={folder} value={folder}>{folder}</option>

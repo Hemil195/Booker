@@ -136,7 +136,10 @@ export function DashboardClient({
   const handleDelete = async (id: string) => {
     await supabase
       .from("bookmarks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .eq("id", id);
     setBookmarks((prev) => prev.filter((b) => b.id !== id));
     setTotalRecords((count) => Math.max(0, count - 1));
@@ -228,7 +231,10 @@ export function DashboardClient({
     const ids = Array.from(selectedIds);
     await supabase
       .from("bookmarks")
-      .update({ deleted_at: new Date().toISOString() })
+      .update({
+        deleted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
       .in("id", ids);
     setBookmarks((prev) => prev.filter((b) => !selectedIds.has(b.id)));
     setTotalRecords((count) => Math.max(0, count - selectedIds.size));
@@ -238,13 +244,14 @@ export function DashboardClient({
   const handleBulkMove = async (targetFolder: string) => {
     if (!targetFolder.trim()) return;
     const ids = Array.from(selectedIds);
+    const folderPath = targetFolder === "__bookmarks_bar__" ? "" : targetFolder.trim();
     await supabase
       .from("bookmarks")
-      .update({ folder_path: targetFolder.trim(), updated_at: new Date().toISOString() })
+      .update({ folder_path: folderPath, updated_at: new Date().toISOString() })
       .in("id", ids);
 
     setBookmarks((prev) =>
-      prev.map((b) => (selectedIds.has(b.id) ? { ...b, folder_path: targetFolder.trim() } : b)),
+      prev.map((b) => (selectedIds.has(b.id) ? { ...b, folder_path: folderPath } : b)),
     );
     setSelectedIds(new Set());
     setNewFolderName("");
@@ -597,6 +604,10 @@ export function DashboardClient({
                 <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "var(--bk-text-muted)" }}>
                   Select existing folder
                 </div>
+                <DropdownMenuItem onClick={() => handleBulkMove("__bookmarks_bar__")}>
+                  <FolderIcon className="w-3.5 h-3.5 mr-2" style={{ color: "var(--bk-accent)" }} />
+                  Bookmarks bar
+                </DropdownMenuItem>
                 {existingFolders.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs" style={{ color: "var(--bk-text-muted)" }}>
                     No existing folders yet

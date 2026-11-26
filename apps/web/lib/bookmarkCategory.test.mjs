@@ -109,11 +109,14 @@ test("does not apply Google product metadata to unrelated hosts", () => {
   assert.equal(getKnownBookmarkMetadata("https://example.com/google-drive"), null);
 });
 test("browser root containers are not treated as user folders", () => {
-  assert.equal(normalizeBrowserFolderPath("Bookmarks bar"), null);
+  assert.equal(normalizeBrowserFolderPath("Bookmarks bar"), "");
+  assert.equal(normalizeBrowserFolderPath("Bookmark bar"), "");
+  assert.equal(normalizeBrowserFolderPath("Bookmarks toolbar"), "");
   assert.equal(normalizeBrowserFolderPath("Other bookmarks"), null);
-  assert.equal(normalizeBrowserFolderPath(""), null);
+  assert.equal(normalizeBrowserFolderPath(""), "");
   assert.equal(normalizeBrowserFolderPath(null), null);
   assert.equal(normalizeBrowserFolderPath("Bookmarks bar/Work/Design"), "Work/Design");
+  assert.equal(normalizeBrowserFolderPath("Bookmark bar/Work"), "Work");
   assert.equal(normalizeBrowserFolderPath("Other bookmarks/Reading"), "Reading");
   assert.equal(normalizeBrowserFolderPath("Work/Design"), "Work/Design");
 });

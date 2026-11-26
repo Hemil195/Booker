@@ -88,14 +88,21 @@ function normalizeEvidence(value: string): string {
 export function isGenericBrowserFolder(folder?: string | null): boolean {
   if (!folder) return true;
   const normalizedFolder = folder.trim().toLowerCase();
-  return /^(other bookmarks|bookmarks bar|mobile bookmarks|imported)(\/|$)/i.test(normalizedFolder)
+  return /^(other bookmarks|bookmark bar|bookmarks bar|bookmark toolbar|bookmarks toolbar|mobile bookmarks|imported)(\/|$)/i.test(normalizedFolder)
     || CATEGORIES.some((category) => category.toLowerCase() === normalizedFolder);
 }
 
-const BROWSER_ROOT_FOLDERS = new Set([
+const BOOKMARKS_BAR_ROOT_FOLDERS = new Set([
+  "bookmark bar",
   "bookmarks bar",
+  "bookmark toolbar",
   "bookmarks toolbar",
+  "favorite bar",
   "favorites bar",
+]);
+
+const BROWSER_ROOT_FOLDERS = new Set([
+  ...BOOKMARKS_BAR_ROOT_FOLDERS,
   "other bookmarks",
   "other favorites",
   "mobile bookmarks",
@@ -103,17 +110,18 @@ const BROWSER_ROOT_FOLDERS = new Set([
 ]);
 
 /**
- * Browser root containers ("Bookmarks bar", "Other bookmarks", ...) are not
- * folders the user created. Strip them so a bookmark sitting directly in a root
- * has no folder (null) and "Bookmarks bar/Work" becomes "Work".
+ * Browser root names are not user-created folders. An explicit Bookmarks bar
+ * root is stored as an empty path; other bare roots have no folder (null).
  */
 export function normalizeBrowserFolderPath(folder?: string | null): string | null {
+  if (folder === "") return "";
   if (!folder) return null;
   const parts = folder.split("/").map((part) => part.trim()).filter(Boolean);
+  const isBookmarksBar = BOOKMARKS_BAR_ROOT_FOLDERS.has(parts[0]?.toLowerCase());
   while (parts.length > 0 && BROWSER_ROOT_FOLDERS.has(parts[0].toLowerCase())) {
     parts.shift();
   }
-  return parts.length > 0 ? parts.join("/") : null;
+  return parts.length > 0 ? parts.join("/") : isBookmarksBar ? "" : null;
 }
 
 export interface BookmarkFolderExample {
@@ -148,7 +156,8 @@ function bookmarkHost(url: string): string | null {
 }
 
 function isDefaultFolderPath(folder: string | null): boolean {
-  return !folder?.trim() || /^(other bookmarks|bookmarks bar|mobile bookmarks|imported)$/i.test(folder.trim());
+  return !folder?.trim()
+    || /^(other bookmarks|bookmark bar|bookmarks bar|bookmark toolbar|bookmarks toolbar|mobile bookmarks|imported)$/i.test(folder.trim());
 }
 
 export function createBookmarkFolderMatcher(examples: BookmarkFolderExample[]) {

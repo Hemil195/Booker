@@ -316,6 +316,7 @@ if (btnUnlink) {
       "bookar_browser",
       "bookar_api_base",
       "bookar_backfill_done",
+      "bookar_sync_cursor",
     ]);
     showUnlinkedState();
   });

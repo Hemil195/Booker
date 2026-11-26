@@ -79,6 +79,42 @@ export async function POST(req: NextRequest) {
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const chunk = rows.slice(i, i + BATCH_SIZE);
+    const { data: existingBookmarks, error: existingLookupError } = await supabase
+      .from("bookmarks")
+      .select("id, url, browser_bookmark_id")
+      .eq("user_id", auth.userId)
+      .in("url", chunk.map((row) => row.url))
+      .is("deleted_at", null);
+
+    if (existingLookupError) {
+      return NextResponse.json(
+        { error: { code: "DB_ERROR", message: existingLookupError.message } },
+        { status: 500 },
+      );
+    }
+
+    const rowsByUrl = new Map(chunk.map((row) => [row.url, row]));
+    for (const existing of existingBookmarks ?? []) {
+      const row = rowsByUrl.get(existing.url);
+      if (!row?.browser_bookmark_id || existing.browser_bookmark_id) continue;
+
+      const { error: linkError } = await supabase
+        .from("bookmarks")
+        .update({
+          device_id: auth.deviceId,
+          browser_bookmark_id: row.browser_bookmark_id,
+        })
+        .eq("id", existing.id)
+        .is("browser_bookmark_id", null);
+
+      if (linkError) {
+        return NextResponse.json(
+          { error: { code: "DB_ERROR", message: linkError.message } },
+          { status: 500 },
+        );
+      }
+    }
+
     const { data: deletedBookmarks, error: deletedLookupError } = await supabase
       .from("bookmarks")
       .select("id, url")
@@ -188,7 +224,7 @@ export async function POST(req: NextRequest) {
     .update({ last_synced_at: new Date().toISOString() })
     .eq("id", auth.deviceId);
 
-  scheduleBookmarkAiDescriptions(newlyAddedBookmarks);
+  scheduleBookmarkAiDescriptions(newlyAddedBookmarks, { preserveFolder: true, preserveTitle: true });
 
   const durationMs = Date.now() - startTime;
 
