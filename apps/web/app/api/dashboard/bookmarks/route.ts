@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabaseServerClient";
 
 const DEFAULT_PAGE_SIZE = 10;
-type FilterTab = "all" | "recent" | "bot" | "popular";
+type FilterTab = "all" | "recent" | "popular";
 
 function groupBookmarks(data: any[]) {
   const groupMap = new Map<string, any>();
@@ -67,7 +67,6 @@ export async function GET(request: NextRequest) {
       nullsFirst: false,
     });
 
-  if (tab === "bot") query = query.in("source", ["bot", "mcp", "api"]);
   if (tab === "popular") query = query.gt("visit_count", 0);
   if (queryText) {
     const escapedQuery = queryText.replace(/[%(),]/g, " ");
@@ -88,7 +87,6 @@ export async function GET(request: NextRequest) {
         ascending: false,
         nullsFirst: false,
       });
-    if (tab === "bot") fallbackQuery = fallbackQuery.in("source", ["bot", "mcp", "api"]);
     if (tab === "popular") fallbackQuery = fallbackQuery.gt("visit_count", 0);
     if (queryText) {
       const escapedQuery = queryText.replace(/[%(),]/g, " ");

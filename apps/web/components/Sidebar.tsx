@@ -8,7 +8,6 @@ import {
   HomeIcon,
   FolderIcon,
   ClockIcon,
-  BotIcon,
   Trash2Icon,
   PlugIcon,
   SettingsIcon,
@@ -21,7 +20,6 @@ const navItems = [
   { label: "All bookmarks", icon: BookmarkIcon, href: "/dashboard/bookmarks" },
   { label: "Folders", icon: FolderIcon, href: "/dashboard/folders" },
   { label: "Recently added", icon: ClockIcon, href: "/dashboard/recent" },
-  { label: "Bot-added", icon: BotIcon, href: "/dashboard/bot-added" },
   { label: "Deleted", icon: Trash2Icon, href: "/dashboard/deleted" },
 ];
 

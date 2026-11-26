@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   BookmarkIcon,
   ClockIcon,
-  BotIcon,
   SearchIcon,
   CheckSquareIcon,
   SquareIcon,
@@ -32,7 +31,7 @@ import { AddBookmarkDialog } from "@/components/AddBookmarkDialog";
 import { BookmarkDetailDialog } from "@/components/BookmarkDetailDialog";
 import { FolderChangeDialog } from "@/components/FolderChangeDialog";
 
-type FilterTab = "all" | "recent" | "bot" | "popular";
+type FilterTab = "all" | "recent" | "popular";
 
 const DEFAULT_PAGE_SIZE = 10;
 
@@ -329,7 +328,6 @@ export function DashboardClient({
     { id: "all", label: "View all", icon: <BookmarkIcon className="w-3.5 h-3.5" /> },
     { id: "recent", label: "Recently added", icon: <ClockIcon className="w-3.5 h-3.5" /> },
     { id: "popular", label: "Most visited", icon: <TrendingUpIcon className="w-3.5 h-3.5" /> },
-    { id: "bot", label: "Bot-added", icon: <BotIcon className="w-3.5 h-3.5" /> },
   ];
 
   return (
